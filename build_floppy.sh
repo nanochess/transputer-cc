@@ -1,0 +1,1 @@
+../github/transputer/os/buildboot -fd -v2 ../github/transputer/os_final/floppy.img . ../github/transputer/os_final/tree/SOM.32.bin ../github/transputer/os_final/tree/Halt.p CC.c CC2.c CCanasin.c CCexpr.c CCgencod.c CCinter.c CCvarios.c CCvars.c cc2.a cc2.cmg

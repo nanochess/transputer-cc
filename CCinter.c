@@ -34,7 +34,7 @@ main()
     prologo();              /* Emite el prologo */
     analiza();              /* Hace la compilación */
     if (nivel)
-      error("Falta llave de cierre");
+      error("Missing closing bracket");
     epilogo();              /* Emite el epilogo */
     cierra_salida();        /* Cierra la salida */
     reporta_errores();      /* Reporta errores detectados */
@@ -45,15 +45,14 @@ main()
 /*
 ** Inicializa todo.
 */
-inicializa()
+void inicializa()
 {
-  ap_glb = INICIO_GLB;    /* Limpia la tabla global */
-  ap_loc = INICIO_LOC;    /* Limpia la tabla local */
+  ap_glb = globales;      /* Limpia la tabla global */
+  ap_loc = locales;       /* Limpia la tabla local */
   ultimo_bucle = NULL;    /* Limpia la cola de bucles */
   pila =                  /* Apuntador de pila */
   errores =               /* No hay errores */
   eof =                   /* No se ha alcanzado el fin del archivo */
-  desvio_salida =         /* No se ha desviado la salida */
   nivel =                 /* No hay bloques abiertos */
   ultima_sentencia =      /* Ninguna sentencia compilada aún */
   comienzo_funcion =      /* La función actual empezó en la linea 0 */
@@ -62,8 +61,8 @@ inicializa()
   sig_etiq =              /* Inicia números de etiquetas */
   nivel_if =              /* No esta dentro de un #if... */
   nivel_incl =            /* No esta dentro de un #include */
-  evadir_nivel =          /* No esta evadiendo ningun texto de la entrada */
-  ultimo_nodo = 0;        /* Ultimo nodo usado del arbol */
+  evadir_nivel = 0;       /* No esta evadiendo ningun texto de la entrada */
+  ultimo_nodo = NULL;     /* Ultimo nodo usado del arbol */
   dentro_pp = NO;         /* No esta dentro del preprocesador */
   ap_mac = 1;             /* Limpia la tabla de macros */
   pos_global = 3;         /* Reserva dos palabras para el limpiador, una */
@@ -71,10 +70,6 @@ inicializa()
                           /* flotante */
   sig_case = casos;       /* Ningún case aún */
   funcion_actual = NULL;  /* Ninguna función aún */
-  lista_estruct = NULL;   /* Ninguna estructura definida */
-  ultima_estruct = NULL;  /* No hay última estructura definida */
-  lista_enum = NULL;      /* No hay lista de enumeradores */
-  ultimo_enum = NULL;     /* No hay último enumerador definido */
   sig_tipo = tipos;       /* Ningún tipo aún */
                           /* Prepara los tipos predefinidos */
   t_achar = sig_tipo;     /* Apuntador a char */
@@ -104,7 +99,7 @@ inicializa()
 /*
 ** Selecciona un color
 */
-color(col)
+void color(col)
   int col;
 {
   putchar(0x1b);
@@ -124,7 +119,7 @@ color(col)
 /*
 ** Cancela la compilación.
 */
-cancela()
+void cancela()
 {
   while (nivel_incl)
     fin_include();
@@ -133,7 +128,7 @@ cancela()
   cierra_salida();
   hacia_consola();
   color(15);
-  mensaje("Compilación cancelada.");
+  mensaje("Compilation cancelled.");
   emite_nueva_linea();
   exit(1);
 }
@@ -141,20 +136,19 @@ cancela()
 /*
 ** Reporta los errores
 */
-reporta_errores()
+void reporta_errores()
 {
   emite_nueva_linea();
   color(11);
-  emite_texto("Hubo ");
   emite_numero(errores);       /* No. total de errores */
-  emite_texto(" errores en la compilación.");
+  emite_texto(" errors in compilation.");
   emite_nueva_linea();
 }
 
 /*
 ** Presentación.
 */
-presentacion()
+void presentacion()
 {
   color(15);
   mensaje(PROGRAMA);
@@ -164,39 +158,39 @@ presentacion()
 /*
 ** Opciones de compilación.
 */
-opciones()
+void opciones()
 {
   color(10);
-  mensaje("¿ Desea una pausa despues de un error (S/N) ? ");
+  mensaje("Do you want a pause after an error (Y/N) ? ");
   gets(linea);
   pausa = NO;
-  if ((car_act == 'S') || (car_act == 's'))
+  if ((car_act == 'Y') || (car_act == 'y'))
     pausa = SI;
 
   color(10);
-  mensaje("¿ Desea que aparezca el listado C en la salida (S/N) ? ");
+  mensaje("Do you want the C source code in the output (Y/N) ? ");
   gets(linea);
   intercala_fuente = NO;
-  if ((car_act == 'S') | (car_act == 's'))
+  if ((car_act == 'Y') | (car_act == 'y'))
     intercala_fuente = SI;
 }
 
 /*
 ** Obtiene el nombre del archivo de salida.
 */
-abre_salida()
+void abre_salida()
 {
   salida = 0;           /* Por defecto la salida a la consola */
   while (salida == 0) {
     descarta();
     color(10);
-    mensaje("¿ Archivo de salida ? ");
+    mensaje("Output file ? ");
     gets(linea);        /* Obtiene el nombre */
     if (car_act == 0)
       break;            /* Ninguno... */
     if ((salida = fopen(linea, "w")) == NULL) {  /* Intenta crear */
       salida = 0;       /* No pudo crearse */
-      error("No se pudo crear el archivo");
+      error("Couldn't open the file");
     }
   }
   hacia_consola();
@@ -208,13 +202,13 @@ abre_salida()
 /*
 ** Obtiene el archivo de entrada
 */
-abre_entrada()
+void abre_entrada()
 {
   entrada = 0;          /* Ninguno aún */
   while (entrada == 0) {
     descarta();         /* Limpia la línea de entrada */
     color(10);
-    mensaje("¿ Archivo de entrada ? ");
+    mensaje("Input file ? ");
     gets(linea);        /* Obtiene un nombre */
     if (car_act == 0)
       break;
@@ -223,7 +217,7 @@ abre_entrada()
     else {
       entrada = 0;      /* No se pudo leer */
       color(15);
-      mensaje("No se pudo leer el archivo");
+      mensaje("Couldn't open the file");
     }
   }
   descarta();           /* Limpia la línea */
@@ -232,7 +226,7 @@ abre_entrada()
 /*
 ** Inicia el contador de líneas.
 */
-nuevo_archivo()
+void nuevo_archivo()
 {
   linea_actual = 0;     /* Ninguna línea leida */
   comienzo_funcion = 0; /* Ninguna función aún */
@@ -243,7 +237,7 @@ nuevo_archivo()
 /*
 ** Procesa #include, abre el nuevo archivo.
 */
-p_include()
+void p_include()
 {
   unsigned char *rastreo, *comienzo;
   int estatus;
@@ -269,24 +263,25 @@ p_include()
   } else {
     estatus = 0;
     comienzo = rastreo;
-    error("Error de sintaxis");
+    error("Syntax error");
   }
   while(*rastreo != '>' && *rastreo != '"' && *rastreo)
     ++rastreo;
   if(*rastreo == '>' && estatus == 1) *rastreo = 0;
   else if(*rastreo == '"' && estatus == 2) *rastreo = 0;
   else if(estatus != 0)
-    error("Falta > o \" al final");
+    error("Missing > or \" at the end");
   if (nivel_incl == MAX_INCL)
-    error("Demasiados #include");
+    error("Too many #include");
   else if ((entrada2 = fopen(comienzo, "r")) == NULL)
-    error("No se pudo leer el archivo");
+    error("Couldn't open the file");
   else {
-    incl[nivel_incl++] = entrada;
-    incl[nivel_incl++] = funcion_actual;
-    incl[nivel_incl++] = comienzo_funcion;
-    incl[nivel_incl++] = linea_actual;
-    incl[nivel_incl++] = dentro_funcion;
+    incl[nivel_incl].entrada = entrada;
+    incl[nivel_incl].funcion_actual = funcion_actual;
+    incl[nivel_incl].comienzo_funcion = comienzo_funcion;
+    incl[nivel_incl].linea_actual = linea_actual;
+    incl[nivel_incl].dentro_funcion = dentro_funcion;
+    nivel_incl++;
     entrada = entrada2;
     nuevo_archivo();
   }
@@ -297,26 +292,27 @@ p_include()
 /*
 ** Fin de un archivo #include
 */
-fin_include()
+void fin_include()
 {
   hacia_consola();
   color(11);
-  emite_texto("#fin include");
+  emite_texto("#end include");
   emite_nueva_linea();
   hacia_archivo();
 
   fclose(entrada);
-  dentro_funcion = incl[--nivel_incl];
-  linea_actual = incl[--nivel_incl];
-  comienzo_funcion = incl[--nivel_incl];
-  funcion_actual = incl[--nivel_incl];
-  entrada = incl[--nivel_incl];
+  nivel_incl--;
+  dentro_funcion = incl[nivel_incl].dentro_funcion;
+  linea_actual = incl[nivel_incl].linea_actual;
+  comienzo_funcion = incl[nivel_incl].comienzo_funcion;
+  funcion_actual = incl[nivel_incl].funcion_actual;
+  entrada = incl[nivel_incl].entrada;
 }
 
 /*
 ** Cierra el archivo de salida.
 */
-cierra_salida()
+void cierra_salida()
 {
   hacia_archivo();      /* Si esta desviado, volver al archivo */
   if (salida)

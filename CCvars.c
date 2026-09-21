@@ -70,26 +70,27 @@
 #define NO           0
 #define SI           1
 
-#define NULL         0
-
 /* Define parametros de la tabla de nombres */
 
-#define TAM_SIM      28
-#define TAM_TABLA    17920
 #define NUM_GLBS     608
-#define INICIO_GLB   tabla
-#define FIN_GLB      (INICIO_GLB+NUM_GLBS*TAM_SIM)
-#define INICIO_LOC   (FIN_GLB+TAM_SIM)
-#define FIN_LOC      tabla+(TAM_TABLA-TAM_SIM)
+#define NUM_LOCS      32
 
-/* Define formato de los nombres */
+struct nombres {
+    unsigned char nombre[17];
+    unsigned char ident;
+    unsigned char clase;
+    unsigned char nivel;
+    unsigned char *tipo;
+    int posicion;
+};
 
-#define NOMBRE       0
-#define IDENT        17
-#define CLASE        18
-#define NIVEL        19
-#define TIPO         20
-#define POSICION     24
+struct nombres globales[NUM_GLBS];
+struct nombres locales[NUM_LOCS];
+
+/*
+** Un número primo para las tablas de dispersión
+*/
+#define NUM_PRIMO    257
 
 /* Tamaño máximo de los nombres */
 
@@ -133,11 +134,12 @@
 #define FUNC_DEF     2
 
 /* Define los desplazamientos en la cola de while's */
-
-#define B_ANTERIOR   0
-#define B_PILA       1
-#define B_BUCLE      2
-#define B_FIN        3
+struct bucle {
+    struct bucle *anterior;
+    int pila;
+    int bucle;
+    int fin;
+};
 
 /* Define el almacenamiento de cadenas */
 
@@ -177,38 +179,34 @@
 
 #define MAX_CASOS    200
 
-/* Número máximo de #include * 5 */
+struct rotulo {           /* DEFINICIÓN DE ESTRUCTURA */
+  struct rotulo *sig;     /* Siguiente rótulo */
+  int tam;                /* Tamaño total de la estructura */
+  struct miembro *lista;  /* Lista de miembros */
+  char que_es;            /* Indica si es un rótulo de struct o enum */
+  char es_union;          /* Indica si es una unión o una estructura */
+  char nombre[1];         /* Nombre */
+};
 
-#define MAX_INCL     50
+struct miembro {          /* DEFINICIÓN DE MIEMBRO DE ESTRUCTURA */
+  struct miembro *sig;    /* Siguiente miembro */
+  int posicion;           /* Posición dentro de la estructura */
+  unsigned char *tipo;    /* Tipo declarado */
+  char nombre[1];         /* Nombre */
+};
 
-/* Definiciones de estructura */
-
-#define EST_QUE_ES    0   /* char, indica si es un rótulo de struct o enum */
-#define EST_ES_UNION  1   /* char, indica si es una unión o una estructura */
-#define EST_TAM       2   /* int, tamaño total de la estructura/unión */
-#define EST_LISTA     6   /* char*, lista de miembros */
-#define EST_SIG      10   /* char*, siguiente rótulo */
-#define EST_NOMBRE   14   /* char[], rótulo */
-
-/* Definiciones de miembros */
-
-#define MIE_TIPO      0   /* char*, tipo del miembro */
-#define MIE_POSICION  4   /* int, posición dentro de la estructura */
-#define MIE_SIG       8   /* char*, siguiente miembro */
-#define MIE_NOMBRE   12   /* nombre del miembro */
-
-/* Definiciones de enumeradores */
-
-#define ENUM_VALOR    0   /* int, valor del enumerador */
-#define ENUM_SIG      4   /* char*, siguiente enumerador */
-#define ENUM_NOMBRE   8   /* char[], nombre del enumerador */
+struct enumerador {       /* DEFINICIÓN DE ENUMERADOR */
+  struct enumerador *sig; /* Siguiente enumerador */
+  int valor;              /* Valor del enumerador */
+  char nombre[1];         /* Nombre */
+};
 
 /* Reserva espacio para las variables */
 
-unsigned char *ap_glb,  /* Apuntadores a las sigs. entradas libres en */
-              *ap_loc;  /* la tabla de nombres */
+struct nombres *ap_glb,  /* Apuntadores a las sigs. entradas libres en */
+                *ap_loc;  /* la tabla de nombres */
 
-int *ultimo_bucle;      /* Apuntador al último bucle abierto */
+struct bucle *ultimo_bucle; /* Apuntador al último bucle abierto */
 
 int ap_lit;             /* Apuntador a la sig. entrada para las cadenas */
 
@@ -227,12 +225,8 @@ int sig_etiq,           /* Siguiente etiqueta disponible */
     errores,            /* No. de errores detectados */
     pausa,              /* Indica si se detiene en caso de error */
     eof,                /* Indica el final del archivo de entrada */
-    entrada,            /* Archivo de entrada */
-    salida,             /* Archivo de salida */
-    entrada2,           /* Archivo #include */
     intercala_fuente,   /* Indica si incluye el prog. en la salida */
     ultima_sentencia,   /* Ultima sentencia ejecutada */
-    desvio_salida,      /* Indica desvio de la salida a la consola */
     comienzo_funcion,   /* Linea de comienzo de la funcion actual */
     linea_actual,       /* Linea en el archivo actual */
     dentro_funcion,     /* Indica si esta dentro de una funcion */
@@ -244,12 +238,13 @@ int sig_etiq,           /* Siguiente etiqueta disponible */
     etiqueta_default,   /* Etiqueta para el default */
    *inicio_lista,       /* Inicio de la lista de cases */
    *sig_case,           /* Siguiente posición disponible para un case */
-    casos[MAX_CASOS],   /* Hasta 100 cases */
-    incl[MAX_INCL];     /* Almacenamiento de #include */
+    casos[MAX_CASOS];   /* Hasta 100 cases */
+
+struct nombres
+     *funcion_actual;   /* Apuntador a la definicion de la función actual */
 
 unsigned
-char *funcion_actual,   /* Apuntador a la definicion de la función actual */
-     *sig_tipo,         /* Sig. posición disponible en la tabla de tipos */
+char *sig_tipo,         /* Sig. posición disponible en la tabla de tipos */
      *tipo_basico,      /* Tipo básico de la declaración actual */
      *tipo_proc,        /* Tipo procesado */
      *t_char,           /* Tipo char o unsigned char */
@@ -263,11 +258,11 @@ char *funcion_actual,   /* Apuntador a la definicion de la función actual */
      *t_achar,          /* Tipo apuntador a char */
      *t_func;           /* Función que retorna int */
 
-unsigned
-char *lista_estruct,    /* Lista de nombres de estructuras */
-     *ultima_estruct,   /* Ultima estructura definida */
-     *lista_enum,       /* Lista de constantes de enumeradores */
-     *ultimo_enum;      /* Ultimo enumerador definido */
+                        /* Tabla de nombres de estructuras */
+struct rotulo *lista_estructura,
+              *ultima_estructura;
+                        /* Tabla de nombres de enumeradores */
+struct enumerador *tabla_enum[NUM_PRIMO];
 
 unsigned char *ap_c;    /* Apuntador de trabajo */
 int *ap_e;              /* Apuntador de trabajo */
@@ -283,8 +278,7 @@ unsigned char args[2],  /* Indica si las dos palabras están ocupadas */
      lits[TAM_LITS],    /* Almacenamiento de cadenas literales */
      macs[TAM_MAC],     /* Buffer de macros */
      amacs[TAM_AMAC],   /* Buffer para argumentos de macros */
-     tipos[TAM_TIPOS],  /* Tabla de tipos */
-     tabla[TAM_TABLA];  /* Tabla de nombres */
+     tipos[TAM_TIPOS];  /* Tabla de tipos */
 
 #define MAX_INIC   16   /* Máximo número de inicializaciones de variables */
                         /* automáticas locales. */
@@ -304,6 +298,8 @@ struct nodo {
   int esp;
   int regs;
   int regsf;
+  struct nodo *tri;
+  int extra_val;
 };
 
 struct nodo *ultimo_nodo;  /* Ultimo nodo definido */

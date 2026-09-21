@@ -46,157 +46,183 @@
 */
 
 /*
+** Función para cálcular la dispersión PJW (P.J. Weinberger)
+**
+** Tomada del libro "Compiladores: Principios, técnicas y herramientas"
+** Alfred V. Aho, Ravi Sethi, Jeffrey D. Ullman. Addison-Wesley 1990.
+** Páginas 450-452.
+*/
+int calcula_dispersion(cadena)
+  char *cadena;
+{
+  int val = 0, temp;
+
+  while (*cadena) {
+    val = (val << 4) + *cadena++;
+    if (temp = val & 0xf0000000) {
+      val ^= temp >> 24;
+      val &= ~0xf0000000;
+    }
+  }
+  return val % NUM_PRIMO;
+}
+
+/*
 ** Un nuevo bucle, lo agrega al final de la lista enlazada
 */
-nuevo_bucle(ap)
-  int ap[];
+void nuevo_bucle(ap)
+  struct bucle *ap;
 {
-  ap[B_ANTERIOR] = ultimo_bucle;  /* Bucle anterior */
-  ap[B_PILA] = pila;              /* Nivel de la pila */
-  ap[B_BUCLE] = nueva_etiq;       /* Etiqueta del bucle */
-  ap[B_FIN] = nueva_etiq;         /* Etiqueta de salida */
+  ap->anterior = ultimo_bucle;  /* Bucle anterior */
+  ap->pila = pila;              /* Nivel de la pila */
+  ap->bucle = nueva_etiq;       /* Etiqueta del bucle */
+  ap->fin = nueva_etiq;         /* Etiqueta de salida */
   ultimo_bucle = ap;
 }
 
 /*
 ** Una nueva variable/función global.
 */
-nueva_glb(nombre, id, clase, tipo, valor)
+struct nombres *nueva_glb(nombre, id, clase, tipo, valor)
   unsigned char *nombre, *tipo;
   int valor, clase, id;
 {
-  unsigned char *ap;
-
-  if (ap_glb >= FIN_GLB) {
-    error("Tabla global llena");
+  struct nombres *ap;
+  unsigned char *ap1;
+    
+  if (ap_glb >= globales + NUM_GLBS) {
+    error("Global table full");
     return 0;
   }
+  ap1 = ap_glb->nombre;
+  while (alfanum(*ap1++ = *nombre++));  /* Copia el nombre */
   ap = ap_glb;
-  while (alfanum(*ap++ = *nombre++));  /* Copia el nombre */
-  ap = ap_glb;
-  ap[IDENT] = id;
-  ap[CLASE] = clase;
-  ap[NIVEL] = 0;
-  escribe_entero(ap + TIPO, tipo);
-  escribe_entero(ap + POSICION, valor);
-  ap_glb += TAM_SIM;
+  ap->ident = id;
+  ap->clase = clase;
+  ap->nivel = 0;
+  ap->tipo = tipo;
+  ap->posicion = valor;
+  ap_glb++;
   return ap;
 }
 
 /*
 ** Una nueva variable local.
 */
-nueva_loc(nombre, id, clase, tipo, valor)
+struct nombres *nueva_loc(nombre, id, clase, tipo, valor)
   unsigned char *nombre, *tipo;
   int valor, clase, id;
 {
-  unsigned char *ap;
+  struct nombres *ap;
+  unsigned char *ap1;
 
-  if (ap_loc >= FIN_LOC) {
-    error("Tabla local llena");
+  if (ap_loc >= locales + NUM_LOCS) {
+    error("Local table full");
     return 0;
   }
+  ap1 = ap_loc->nombre;
+  while (alfanum(*ap1++ = *nombre++));  /* Copia el nombre */
   ap = ap_loc;
-  while (alfanum(*ap++ = *nombre++));  /* Copia el nombre */
-  ap = ap_loc;
-  ap[IDENT] = id;
-  ap[CLASE] = clase;
-  ap[NIVEL] = nivel;
-  escribe_entero(ap + TIPO, tipo);
-  escribe_entero(ap + POSICION, valor);
-  ap_loc += TAM_SIM;
+  ap->ident = id;
+  ap->clase = clase;
+  ap->nivel = nivel;
+  ap->tipo = tipo;
+  ap->posicion = valor;
+  ap_loc++;
   return ap;
 }
 
 /*
-** Una nueva estructura.
+** Una nueva estructura (en realidad un rótulo de estructura).
 */
-nueva_estructura(nombre)
-  unsigned char *nombre;
+struct rotulo *nueva_estructura(nombre)
+  char *nombre;
 {
-  unsigned char *ap;
-  int conteo;
+  struct rotulo *ap;
 
-  if(ultima_estruct != NULL)
-    escribe_entero(ultima_estruct + EST_SIG, sig_tipo);
-  ultima_estruct = sig_tipo;
-  if(lista_estruct == NULL)
-    lista_estruct = sig_tipo;
-  conteo = 0;
-  while(conteo++ < EST_NOMBRE)
-    guarda_tipo(0);
-  while(*nombre)
-    guarda_tipo(*nombre++);
-  guarda_tipo(0);
-  return ultima_estruct;
+  ap = malloc(sizeof(struct rotulo) + strlen(nombre));
+  if (ap == NULL) {
+    error("Out of memory");
+    return NULL;
+  }
+  if (lista_estructura == NULL)
+    lista_estructura = ap;
+  if (ultima_estructura != NULL)
+    ultima_estructura->sig = ap;
+  ultima_estructura = ap;
+  ap->sig = NULL;
+  ap->es_union = 0;
+  ap->que_es = 0;
+  ap->lista = NULL;
+  ap->tam = 0;
+  strcpy(ap->nombre, nombre);
+  return ap;
 }
 
 /*
 ** Un nuevo miembro de una estructura.
 */
-nuevo_miembro(lista, nombre)
-  unsigned char **lista, *nombre;
+struct miembro *nuevo_miembro(lista, nombre)
+  struct miembro **lista;
+  char *nombre;
 {
-  unsigned char *sig, *nuevo;
-  int conteo;
+  struct miembro *nuevo, *sig;
 
-  if(*lista == NULL)
-    *lista = sig_tipo;
+  nuevo = malloc(sizeof(struct miembro) + strlen(nombre));
+  if (nuevo == NULL) {
+    error("Out of memory");
+    return NULL;
+  }
+  if (*lista == NULL)
+    *lista = nuevo;
   else {
     sig = *lista;
-    while(lee_entero(sig + MIE_SIG) != NULL)
-      sig = lee_entero(sig + MIE_SIG);
-    escribe_entero(sig + MIE_SIG, sig_tipo);
+    while (sig->sig != NULL)
+      sig = sig->sig;
+    sig->sig = nuevo;
   }
-  nuevo = sig_tipo;
-  conteo = 0;
-  while(conteo++ < MIE_NOMBRE)
-    guarda_tipo(0);
-  while(*nombre)
-    guarda_tipo(*nombre++);
-  guarda_tipo(0);
+  nuevo->sig = NULL;
+  nuevo->tipo = NULL;
+  nuevo->posicion = 0;
+  strcpy(nuevo->nombre, nombre);
   return nuevo;
 }
 
 /*
-** Una nueva constante de un enumerador.
+** Un nuevo enumerador.
 */
-nuevo_enum(nombre, valor)
-  unsigned char *nombre;
+void nuevo_enum(nombre, valor)
+  char *nombre;
   int valor;
 {
-  int conteo;
+  struct enumerador *nuevo;
+  int dispersion;
 
-  if(ultimo_enum != NULL)
-    escribe_entero(ultimo_enum + ENUM_SIG, sig_tipo);
-  ultimo_enum = sig_tipo;
-  if(lista_enum == NULL)
-    lista_enum = sig_tipo;
-  guarda_tipo(valor);
-  guarda_tipo(valor >> 8);
-  guarda_tipo(valor >> 16);
-  guarda_tipo(valor >> 24);
-  conteo = 0;
-  while(conteo++ < 4)
-    guarda_tipo(0);
-  while(*nombre)
-    guarda_tipo(*nombre++);
-  guarda_tipo(0);
+  nuevo = malloc(sizeof(struct enumerador) + strlen(nombre));
+  if (nuevo == NULL) {
+    error("No hay memoria");
+    return;
+  }
+  dispersion = calcula_dispersion(nombre);
+  nuevo->sig = tabla_enum[dispersion];
+  tabla_enum[dispersion] = nuevo;
+  nuevo->valor = valor;
+  strcpy(nuevo->nombre, nombre);
 }
 
 /*
 ** Busca una variable/función global.
 */
-busca_glb(nombre)
+struct nombres *busca_glb(nombre)
   unsigned char *nombre;
 {
-  unsigned char *ap;
+  struct nombres *ap;
 
-  ap = INICIO_GLB;
+  ap = globales;
   while (ap != ap_glb) {
-    if (astreq(nombre, ap, MAX_NOMBRE))
+    if (astreq(nombre, ap->nombre, MAX_NOMBRE))
       return ap;
-    ap += TAM_SIM;
+    ap++;
   }
   return NULL;
 }
@@ -204,15 +230,15 @@ busca_glb(nombre)
 /*
 ** Busca una variable/función local.
 */
-busca_loc(nombre)
+struct nombres *busca_loc(nombre)
   unsigned char *nombre;
 {
-  unsigned char *ap;
+  struct nombres *ap;
 
   ap = ap_loc;
-  while (ap != INICIO_LOC) {
-    ap -= TAM_SIM;
-    if (astreq(nombre, ap, MAX_NOMBRE))
+  while (ap != locales) {
+    ap--;
+    if (astreq(nombre, ap->nombre, MAX_NOMBRE))
       return ap;
   }
   return NULL;
@@ -221,16 +247,16 @@ busca_loc(nombre)
 /*
 ** Busca una estructura.
 */
-busca_estructura(nombre)
+struct rotulo *busca_estructura(nombre)
   unsigned char *nombre;
 {
-  unsigned char *ap;
+  struct rotulo *ap;
 
-  ap = lista_estruct;
+  ap = lista_estructura;
   while (ap != NULL) {
-    if (astreq(nombre, ap + EST_NOMBRE, MAX_NOMBRE))
+    if (astreq(nombre, ap->nombre, MAX_NOMBRE))
       return ap;
-    ap = lee_entero(ap + EST_SIG);
+    ap = ap->sig;
   }
   return NULL;
 }
@@ -238,13 +264,14 @@ busca_estructura(nombre)
 /*
 ** Busca un miembro de estructura.
 */
-busca_miembro(lista, nombre)
-  unsigned char *lista, *nombre;
+struct miembro *busca_miembro(lista, nombre)
+  struct miembro *lista;
+  unsigned char *nombre;
 {
   while (lista != NULL) {
-    if (astreq(nombre, lista + MIE_NOMBRE, MAX_NOMBRE))
+    if (astreq(nombre, lista->nombre, MAX_NOMBRE))
       return lista;
-    lista = lee_entero(lista + MIE_SIG);
+    lista = lista->sig;
   }
   return NULL;
 }
@@ -252,16 +279,16 @@ busca_miembro(lista, nombre)
 /*
 ** Busca un enumerador.
 */
-busca_enum(nombre)
+struct enumerador *busca_enum(nombre)
   unsigned char *nombre;
 {
-  unsigned char *ap;
+  struct enumerador *ap;
 
-  ap = lista_enum;
+  ap = tabla_enum[calcula_dispersion(nombre)];
   while (ap != NULL) {
-    if (astreq(nombre, ap + ENUM_NOMBRE, MAX_NOMBRE))
+    if (astreq(nombre, ap->nombre, MAX_NOMBRE))
       return ap;
-    ap = lee_entero(ap + ENUM_SIG);
+    ap = ap->sig;
   }
   return NULL;
 }
@@ -269,7 +296,7 @@ busca_enum(nombre)
 /*
 ** Checa si la proxima cadena de entrada es un nombre legal.
 */
-nombre_legal(nombre)
+int nombre_legal(nombre)
   unsigned char *nombre;
 {
   int k;
@@ -292,17 +319,17 @@ nombre_legal(nombre)
 /*
 ** Imprime un retorno de carro y una cadena a la consola.
 */
-mensaje(cad)
+void mensaje(cad)
   unsigned char *cad;
 {
-  fputs("\n", stdout);
-  fputs(cad, stdout);
+  puts("\n");
+  puts(cad);
 }
 
 /*
 ** Siguiente caracter en la línea.
 */
-prox_car()
+int prox_car()
 {
   if (car_act == 0)
     return 0;
@@ -313,7 +340,7 @@ prox_car()
 /*
 ** Pasa al siguiente caracter, retorna el caracter anterior.
 */
-obt_car()
+int obt_car()
 {
   if (car_act == 0)
     return 0;
@@ -324,7 +351,7 @@ obt_car()
 /*
 ** Descarta la línea actual.
 */
-descarta()
+void descarta()
 {
   pos_linea = 0;
   linea[pos_linea] = 0;
@@ -334,7 +361,7 @@ descarta()
 ** Obtiene un caracter, si era el último en la línea, carga
 ** otra línea.
 */
-lee_car()
+int lee_car()
 {
   while (car_act == 0) {
     if (eof)
@@ -347,9 +374,9 @@ lee_car()
 /*
 ** Obtiene otra linea de la entrada.
 */
-lee_linea()
+void lee_linea()
 {
-  int k, unidad;
+  int k;
 
   while (1) {
     descarta();
@@ -357,8 +384,7 @@ lee_linea()
       eof = 1;
       return;
     }
-    unidad = entrada;
-    while ((k = fgetc(unidad)) > 0) {
+    while ((k = fgetc(entrada)) > 0) {
       if (k == 13)
         continue;
       if ((k == '\n') || (pos_linea >= MAX_LINEA))
@@ -390,7 +416,7 @@ lee_linea()
 /*
 ** Hace el preprocesamiento.
 */
-preprocesa()
+void preprocesa()
 {
   int k, car, hay_if;
   unsigned char c, nombre[TAM_NOMBRE], *def, *busqueda;
@@ -436,7 +462,7 @@ preprocesa()
             evadir_nivel = 0;
           else if(evadir_nivel == 0)
             evadir_nivel = nivel_if;
-        } else error("No hay #if...");
+        } else error("No #if...");
         continue;
       }
       if(match("endif")) {
@@ -444,7 +470,7 @@ preprocesa()
           if(evadir_nivel == nivel_if)
             evadir_nivel = 0;
           --nivel_if;
-        } else error("No hay #if...");
+        } else error("No #if...");
         continue;
       }
       if(evadir_nivel) continue;
@@ -507,7 +533,7 @@ preprocesa()
           def = macs + k;
           if(pars) {
             espacios();
-            if(car_act != '(') error("falta (");
+            if(car_act != '(') error("Missing (");
             obt_car();
             args = paren = 0;
             while(car_act && car_act != ')') {
@@ -524,7 +550,7 @@ preprocesa()
                 if(m < MAX_AMAC)
                   amacs[m++] = obt_car();
                 else {
-                  error("Tabla de parametros de macros llena");
+                  error("Macro parameter table is full");
                   cancela();
                 }
               }
@@ -534,9 +560,9 @@ preprocesa()
               ++args;
             }
             if(args != pars)
-              error("Número incorrecto de argumentos");
+              error("Wrong number of arguments");
             if(car_act != ')')
-              error("Falta )");
+              error("Missing )");
             obt_car();
           }
           while(*def) {
@@ -566,7 +592,7 @@ preprocesa()
     strcpy(linea, linea_m);
     pos_linea = 0;
     if (pos_linea_m >= MAX_LINEA) {
-      error("Línea muy larga");
+      error("Line too long");
       break;
     }
   }
@@ -582,7 +608,7 @@ preprocesa()
 ** Primer paso del preprocesamiento, pega líneas terminadas en \, y
 ** elimina los comentarios.
 */
-primer_paso()
+void primer_paso()
 {
   int car;
 
@@ -607,13 +633,13 @@ primer_paso()
   }
   almacena_car(0);
   if (pos_linea_m >= MAX_LINEA)
-    error("Línea muy larga");
+    error("Line too long");
   pos_linea = pos_linea_m = 0;
   while (linea[pos_linea++] = linea_m[pos_linea_m++]);
   pos_linea = 0;
 }
 
-almacena_car(c)
+int almacena_car(c)
   unsigned char c;
 {
   linea_m[pos_linea_m] = c;
@@ -625,7 +651,7 @@ almacena_car(c)
 /*
 ** elimina espacios y tabuladores extras.
 */
-pp_espacios()
+void pp_espacios()
 {
   almacena_car(' ');
   while (isspace(car_act))
@@ -635,13 +661,13 @@ pp_espacios()
 /*
 ** Procesa cadenas de caracteres.
 */
-pp_comillas()
+void pp_comillas()
 {
   almacena_car(obt_car());
   while ((car_act != '"') ||
         ((linea[pos_linea - 1] == 92) && (linea[pos_linea - 2] != 92))) {
     if (car_act == 0) {
-      error("Faltan comillas");
+      error("Missing quotes");
       break;
     }
     almacena_car(obt_car());
@@ -653,14 +679,14 @@ pp_comillas()
 /*
 ** Procesa caracteres encerrados entre '
 */
-pp_apostrofe()
+void pp_apostrofe()
 {
   almacena_car(39);
   obt_car();
   while ((car_act != 39) ||
         ((linea[pos_linea - 1] == 92) && (linea[pos_linea - 2] != 92))) {
     if (car_act == 0) {
-      error("Falta un apostrofe");
+      error("Missing apostrophe");
       break;
     }
     almacena_car(obt_car());
@@ -672,7 +698,7 @@ pp_apostrofe()
 /*
 ** Procesa y elimina comentarios.
 */
-pp_comentarios()
+void pp_comentarios()
 {
   pos_linea = pos_linea + 2;
   while ((car_act != '*') ||
@@ -690,7 +716,7 @@ pp_comentarios()
 /*
 ** Añade una nueva macro en la tabla.
 */
-nueva_macro()
+void nueva_macro()
 {
   unsigned char nombre[TAM_NOMBRE];
   int k, car;
@@ -716,7 +742,7 @@ nueva_macro()
         while(alfanum(car_act)) {
           if(l < MAX_AMAC) amacs[l++] = obt_car();
           else {
-            error("Tabla de parametros de macros llena");
+            error("Macro parameter table is full");
             cancela();
           }
         }
@@ -726,7 +752,7 @@ nueva_macro()
       espacios();
       if(car_act == ',') obt_car();
       else if(car_act != ')') {
-        error("Falta ) en #define");
+        error("Missing ) in #define");
         break;
       }
     }
@@ -765,13 +791,13 @@ nueva_macro()
   }
   pone_macro(0);
   if (ap_mac >= MAX_MAC)
-    error("Tabla de macros llena");
+    error("Macro table full");
 }
 
 /*
 ** Elimina una macro de la tabla.
 */
-borra_macro(nombre)
+void borra_macro(nombre)
   unsigned char *nombre;
 {
   int k, l, m;
@@ -788,7 +814,7 @@ borra_macro(nombre)
   }
 }
 
-pone_macro(c)
+int pone_macro(c)
   unsigned char c;
 {
   macs[ap_mac] = c;
@@ -800,7 +826,7 @@ pone_macro(c)
 /*
 ** Busca una macro en la tabla.
 */
-busca_macro(nombre)
+int busca_macro(nombre)
   unsigned char *nombre;
 {
   int k;
@@ -817,29 +843,9 @@ busca_macro(nombre)
 }
 
 /*
-** Desvia la salida a la consola.
-*/
-hacia_consola()
-{
-  desvio_salida = salida;
-  salida = 0;
-  color(15);
-}
-
-/*
-** Regresa la salida al archivo.
-*/
-hacia_archivo()
-{
-  if (desvio_salida)
-    salida = desvio_salida;
-  desvio_salida = 0;
-}
-
-/*
 ** Manda un caracter a la salida.
 */
-emite_car(c)
+int emite_car(c)
   unsigned char c;
 {
   if (c == 0)
@@ -847,7 +853,7 @@ emite_car(c)
   if (salida) {
     if (fputc(c, salida) <= 0) {
       cierra_salida();
-      error("Error al escribir");
+      error("Output error");
       cancela();
     }
   } else
@@ -858,7 +864,7 @@ emite_car(c)
 /*
 ** Cambio de linea a la salida.
 */
-emite_nueva_linea()
+void emite_nueva_linea()
 {
   emite_car('\n');
 }
@@ -866,7 +872,7 @@ emite_nueva_linea()
 /*
 ** Ilustra los mensajes de error.
 */
-error(ap)
+void error(ap)
   unsigned char ap[];
 {
   int k;
@@ -874,15 +880,15 @@ error(ap)
 
   hacia_consola();
   color(11);
-  emite_texto("Línea ");
+  emite_texto("Line ");
   emite_numero(linea_actual);
   emite_texto(", ");
   if (!dentro_funcion)
     emite_car('(');
   if (funcion_actual == NULL)
-    emite_texto("comienzo del archivo");
+    emite_texto("from start of the file");
   else
-    emite_texto(funcion_actual + NOMBRE);
+    emite_texto(funcion_actual->nombre);
   if (!dentro_funcion)
     emite_car(')');
   emite_texto(" + ");
@@ -910,12 +916,12 @@ error(ap)
   hacia_archivo();
   if (pausa) {
     color(10);
-    mensaje("¿ Continuar (Si, No, Pasar de largo) ? ");
+    mensaje("Continue (Y/N/Ignore) ? ");
     gets(entrada);
     k = entrada[0];
     if ((k == 'N') || (k == 'n'))
       cancela();
-    if ((k == 'P') || (k == 'p'))
+    if ((k == 'I') || (k == 'i'))
       pausa = NO;
   }
 }
@@ -923,7 +929,7 @@ error(ap)
 /*
 ** Manda una línea a la salida, hace un cambio de linea también.
 */
-emite_linea(ap)
+void emite_linea(ap)
   unsigned char *ap;
 {
   emite_texto(ap);
@@ -933,7 +939,7 @@ emite_linea(ap)
 /*
 ** Manda un texto a la salida.
 */
-emite_texto(ap)
+void emite_texto(ap)
   unsigned char *ap;
 {
   while (emite_car(*ap++));
@@ -942,7 +948,7 @@ emite_texto(ap)
 /*
 ** Checa si encuentra un operador de expresión.
 */
-encuentra(op)
+int encuentra(op)
   unsigned char *op;
 {
   int tam_op;
@@ -955,7 +961,7 @@ encuentra(op)
   return 0;
 }
 
-streq(cad1, cad2)
+int streq(cad1, cad2)
   unsigned char cad1[], cad2[];
 {
   int k;
@@ -969,7 +975,7 @@ streq(cad1, cad2)
   return k;
 }
 
-astreq(cad1, cad2, len)
+int astreq(cad1, cad2, len)
   unsigned char cad1[], cad2[];
   int len;
 {
@@ -992,7 +998,7 @@ astreq(cad1, cad2, len)
   return k;
 }
 
-match(lit)
+int match(lit)
   unsigned char *lit;
 {
   int k;
@@ -1005,7 +1011,7 @@ match(lit)
   return 0;
 }
 
-amatch(lit, len)
+int amatch(lit, len)
   unsigned char *lit;
   int len;
 {
@@ -1024,7 +1030,7 @@ amatch(lit, len)
 /*
 ** Salta los espacios en la entrada.
 */
-espacios()
+void espacios()
 {
   while (1) {
     while (car_act == 0) {
@@ -1043,7 +1049,7 @@ espacios()
 /*
 ** Compone un entero.
 */
-lee_entero(dir)
+int lee_entero(dir)
   unsigned char *dir;
 {
   return *dir | (*(dir+1) << 8) | (*(dir+2) << 16) | (*(dir+3) << 24);
@@ -1052,7 +1058,7 @@ lee_entero(dir)
 /*
 ** Escribe un entero en una dirección.
 */
-escribe_entero(dir, dato)
+void escribe_entero(dir, dato)
   unsigned char *dir;
   int dato;
 {
@@ -1065,7 +1071,7 @@ escribe_entero(dir, dato)
 /*
 ** Saca un número decimal en la salida.
 */
-emite_numero(numero)
+void emite_numero(numero)
   int numero;
 {
   if (numero < 0) {
@@ -1083,7 +1089,7 @@ emite_numero(numero)
 /*
 ** Prueba si el caracter dado es una letra.
 */
-letra(c)
+int letra(c)
   int c;
 {
   c = c & 255;
@@ -1095,7 +1101,7 @@ letra(c)
 /*
 ** Prueba si el caracter dado es alfanumérico.
 */
-alfanum(c)
+int alfanum(c)
   unsigned char c;
 {
   return ((letra(c)) || (isdigit(c)));
@@ -1104,7 +1110,7 @@ alfanum(c)
 /*
 ** Evade basura en la entrada.
 */
-basura()
+void basura()
 {
   if (alfanum(lee_car()))
     while (alfanum(car_act))
@@ -1118,75 +1124,3 @@ basura()
   espacios();
 }
 
-/*
-** Prueba si el caracter dado es un número.
-*/
-isdigit(c)
-  int c;
-{
-  return ((c >= '0') && (c <= '9'));
-}
-
-/*
-** Checa si es un número hexadecimal.
-*/
-isxdigit(c)
-  unsigned char c;
-{
-  return (((c >= '0') && (c <= '9')) ||
-          ((c >= 'A') && (c <= 'F')) ||
-          ((c >= 'a') && (c <= 'f')));
-}
-
-/*
-** Checa si es un espacio.
-*/
-isspace(c)
-  unsigned char c;
-{
-  return (c == ' ') || (c == 9);
-}
-
-/*
-** Conversión a máyusculas.
-*/
-toupper(c)
-  unsigned char c;
-{
-  if ((c >= 'a') && (c <= 'z'))
-    c = c + ('A' - 'a');
-  return (c);
-}
-
-/*
-** Retorna el tamaño de una cadena.
-*/
-strlen(s)
-  unsigned char *s;
-{
-  unsigned char *t;
-
-  t = s;
-  while (*s)
-    s++;
-  return (s - t);
-}
-
-/*
-** Copia una cadena.
-*/
-strcpy(destino, origen)
-  unsigned char *destino, *origen;
-{
-  while (*destino++ = *origen++);
-}
-
-/*
-** Concatena una cadena.
-*/
-strcat(destino, origen)
-  unsigned char *destino, *origen;
-{
-  while (*destino) ++destino;
-  strcpy(destino, origen);
-}

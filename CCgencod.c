@@ -91,7 +91,7 @@
 /*
 ** Libera un arbol.
 */
-libera_arbol(nodo)
+void libera_arbol(nodo)
   struct nodo *nodo;
 {
   int op;
@@ -99,20 +99,20 @@ libera_arbol(nodo)
   op = nodo->oper;
   if (nodo->izq != NULL)
     libera_arbol(nodo->izq);
-  if ((op != N_INC) && (op != N_PINC) && (op != N_RESULTA)
+  if ((op != N_RESULTA)
    && (op != N_PAR) && (op != N_PARF) && (nodo->der != NULL))
     libera_arbol(nodo->der);
   if ((op == N_FUNCI) || (op == N_PAR) || (op == N_PARF) ||
       (op == N_TRI) || (op == N_RESULTA))
-    if (nodo->esp != NULL)
-      libera_arbol(nodo->esp);
+    if (nodo->tri != NULL)
+      libera_arbol(nodo->tri);
   free(nodo);
 }
 
 /*
 ** Crea un nodo del arbol de expresiones.
 */
-crea_nodo(op, izq, der, val)
+void crea_nodo(op, izq, der, val)
   int op, val;
   struct nodo *izq, *der;
 {
@@ -120,7 +120,7 @@ crea_nodo(op, izq, der, val)
 
   ultimo_nodo = malloc(sizeof(struct nodo));
   if (ultimo_nodo == NULL) {
-    error("Expresión muy compleja");
+    error("Too complex expression");
     cancela();
   }
   if (op == N_CSUMA) {
@@ -166,12 +166,14 @@ crea_nodo(op, izq, der, val)
   ultimo_nodo->esp = val;
   ultimo_nodo->regs = 0;
   ultimo_nodo->regsf = 0;
+  ultimo_nodo->tri = NULL;
+  ultimo_nodo->extra_val = 0;
 }
 
 /*
 ** Genera codigo para todo un arbol.
 */
-gen_codigo(nodo)
+void gen_codigo(nodo)
   struct nodo *nodo;
 {
   raiz_arbol = nodo;
@@ -188,7 +190,7 @@ gen_codigo(nodo)
 ** Cada nodo es etiquetado con el número de registros
 ** que requiere para evaluarse.
 */
-etiqueta(nodo)
+void etiqueta(nodo)
   struct nodo *nodo;
 {
   int min, max, op, req_res;
@@ -197,13 +199,13 @@ etiqueta(nodo)
   op = nodo->oper;
   if (nodo->izq != NULL)
     etiqueta(nodo->izq);
-  if ((op != N_INC) && (op != N_PINC) && (op != N_RESULTA)
+  if ((op != N_RESULTA)
    && (op != N_PAR) && (op != N_PARF) && (nodo->der != NULL))
     etiqueta(nodo->der);
   if ((op == N_FUNCI) || (op == N_PAR) || (op == N_PARF) ||
       (op == N_TRI) || (op == N_RESULTA))
-    if (nodo->esp != NULL)
-      etiqueta(nodo->esp);
+    if (nodo->tri != NULL)
+      etiqueta(nodo->tri);
   if ((op == N_FUNCI) || (op == N_FUNC) ||
       (op == N_ANDB) || (op == N_ORB) ||
       (op == N_TRI) || (op == N_COMA) ||
@@ -284,7 +286,7 @@ etiqueta(nodo)
 /*
 ** Codigo para cada operador binario, y algunos unarios.
 */
-gen_oper(oper, rev)
+void gen_oper(oper, rev)
   int oper, rev;
 {
   if (oper == N_NULO) return;
@@ -381,7 +383,7 @@ gen_oper(oper, rev)
 /*
 ** Genera codigo para el nodo del arbol.
 */
-gen_nodo(nodo)
+void gen_nodo(nodo)
   struct nodo *nodo;
 {
   int conteo, pals, par, rev, op, req, req_res;
@@ -400,8 +402,8 @@ gen_nodo(nodo)
     req_res = 0;                      /* Inicio de argumentos */
     while (nodo_temp != NULL) {
       if (nodo_temp->oper == N_RESULTA) {  /* Función que retorna estructura */
-        pals += (req_res = nodo_temp->der);
-        nodo_b = -1;
+        pals += (req_res = nodo_temp->esp);
+        nodo_b = nodo_temp;
         req = NO;
       } else {
         if (nodo_temp->der)           /* garantiza que una estructura se */
@@ -421,19 +423,19 @@ gen_nodo(nodo)
             else
               pals += 2;              /* parametro de tipo double */
           } else
-            pals += nodo_temp->der;   /* tamaño de la estructura */
+            pals += nodo_temp->esp;   /* tamaño de la estructura */
           conteo++;
         }
       }
-      nodo_temp = nodo_temp->esp;
+      nodo_temp = nodo_temp->tri;
     }
     pila = desp_pila(pila - pals);    /* asigna espacio a los parametros */
     if (conteo) {                     /* Procesa los parametros que no puede */
       nodo_temp = nodo->izq;          /* poner en registros. */
       if (nodo_b != NULL)             /* nodo_b y nodo_c pueden quedar sin uso, */
-        nodo_temp = nodo_temp->esp;   /* sólo si se pasa una estructura. */
+        nodo_temp = nodo_temp->tri;   /* sólo si se pasa una estructura. */
       if (nodo_c != NULL)
-        nodo_temp = nodo_temp->esp;
+        nodo_temp = nodo_temp->tri;
       par = req_res;
       while (conteo--) {
         if (nodo_temp->der == NULL) {
@@ -450,24 +452,24 @@ gen_nodo(nodo)
           pila_extra = pila;
           estructura(nodo_temp->izq);
           ins("ldlp ", par - (pila - pila_extra));
-          ins("ldc ", (int) nodo_temp->der * 4);
+          ins("ldc ", nodo_temp->esp * 4);
           emite_linea("move");
           pila = desp_pila(pila_extra);
-          par += nodo_temp->der;
+          par += nodo_temp->esp;
         }
-        nodo_temp = nodo_temp->esp;             /* siguiente parametro */
+        nodo_temp = nodo_temp->tri;             /* siguiente parametro */
       }
     }
     if (op == N_FUNC) {               /* función directa, se aceptan params. */
       if (nodo_c == NULL) {           /* en registros, seleccionar carga */
         if (nodo_b != NULL) {         /* óptima. */
-          if (nodo_b == -1)
+          if (nodo_b->oper == N_RESULTA)
             emite_linea("ldlp 0");
           else
             gen_nodo(nodo_b);
         }
       } else {
-        if (nodo_b == -1) {
+        if (nodo_b != NULL && nodo_b->oper == N_RESULTA) {
           gen_nodo(nodo_c);
           emite_linea("ldlp 0");
         } else if ((nodo_c->regs >= nodo_b->regs) &&
@@ -487,11 +489,11 @@ gen_nodo(nodo)
         }
       }
       ins("ldl ", 1 - pila);
-      llamada(nodo->esp);
+      llamada((unsigned char *) nodo->tri);
     } else {                          /* Llamada indirecta, simular */
       pila = desp_pila(pila - 4);     /* llamada con parametros en regs. */
       if (nodo_b != NULL) {
-        if (nodo_b == -1)
+        if (nodo_b->oper == N_RESULTA)
           emite_linea("ldlp 4");
         else
           gen_nodo(nodo_b);
@@ -501,12 +503,12 @@ gen_nodo(nodo)
         gen_nodo(nodo_c);
         emite_linea("stl 3");
       }
-      gen_nodo(nodo->esp);
+      gen_nodo(nodo->tri);
       ins("ldl ", 1 - pila);
       emite_texto("ldc 3\nldpi\nstl 0\nstl 1\ngcall\n");
       pila += 4;
     }
-    if (nodo->der)
+    if (nodo->extra_val)
       emite_linea("ldlp 0");
     else
       pila = desp_pila(pila + pals);
@@ -689,7 +691,7 @@ gen_nodo(nodo)
   }
   if (op == N_APFUNC) {
     emite_texto("ldc ");
-    emite_nombre(nodo->esp);
+    emite_nombre((unsigned char *) nodo->tri);
     emite_texto("-");
     emite_etiq(temp = nueva_etiq);
     emite_nueva_linea();
@@ -756,7 +758,7 @@ gen_nodo(nodo)
     if (op == N_PINC)
       if (req_res)
         emite_linea("dup");
-    ins("adc ", nodo->der);
+    ins("adc ", nodo->extra_val);
     if (op == N_INC)
       if (req_res)
         emite_linea("dup");
@@ -810,17 +812,17 @@ gen_nodo(nodo)
   }
   if (op == N_TRI) {
     temp = nueva_etiq;
-    nodo_temp = nodo->esp;
+    nodo_temp = nodo->tri;
     if ((nodo_temp->oper == N_ANDB) || (nodo_temp->oper == N_ORB)) {
       etiq_and = nueva_etiq;
       etiq_or = nueva_etiq;
-      corto_circuito(nodo->esp, etiq_and, etiq_or);
+      corto_circuito(nodo_temp, etiq_and, etiq_or);
       salta_si_falso(etiq_and);
       emite_etiq(etiq_or);
       dos_puntos();
       emite_nueva_linea();
     } else {
-      gen_nodo(nodo->esp);
+      gen_nodo(nodo->tri);
       salta_si_falso(etiq_and = nueva_etiq);
     }
     gen_nodo(nodo->izq);
@@ -945,16 +947,16 @@ gen_nodo(nodo)
         rev = SI;
       } else {
         gen_nodo(nodo->der);
-        salva(1);
+        salva(nodo->esp ? 2 : 1);
         gen_nodo(nodo->izq);
         if (op == N_SUMAPF) {
-          recupera(2);
+          recupera(nodo->esp ? 5 : 2);
           return;
         } else if (op == N_MULPF) {
-          recupera(3);
+          recupera(nodo->esp ? 6 : 3);
           return;
         }
-        recupera(1);
+        recupera(nodo->esp ? 4 : 1);
       }
     } else {
       if ((nodo->izq->regs >= nodo->der->regs) &&
@@ -1003,7 +1005,7 @@ gen_nodo(nodo)
 /*
 ** Genera una secuencia optima para && y ||
 */
-corto_circuito(nodo, etiq_and, etiq_or)
+void corto_circuito(nodo, etiq_and, etiq_or)
   int etiq_and, etiq_or;
   struct nodo *nodo;
 {
@@ -1063,7 +1065,7 @@ corto_circuito(nodo, etiq_and, etiq_or)
   }
 }
 
-accesa_nodo(tipo, nodo, lectura)
+void accesa_nodo(tipo, nodo, lectura)
   int tipo, lectura;
   struct nodo *nodo;
 {
@@ -1087,15 +1089,15 @@ accesa_nodo(tipo, nodo, lectura)
 /*
 ** Genera el codigo correcto para copias de estructuras.
 */
-estructura(nodo)
+void estructura(nodo)
   struct nodo *nodo;
 {
   if (nodo->oper == N_FUNC || nodo->oper == N_FUNCI)
-    nodo->der = 1;
+    nodo->extra_val = 1;
   gen_nodo(nodo);
 }
 
-carga(tipo)
+void carga(tipo)
   int tipo;
 {
   if (tipo == INT || tipo == UINT)
@@ -1112,7 +1114,7 @@ carga(tipo)
     emite_linea("lb");
 }
 
-almacena(tipo)
+void almacena(tipo)
   int tipo;
 {
   if (tipo == INT || tipo == UINT)
@@ -1130,7 +1132,7 @@ almacena(tipo)
 /*
 ** Copia una estructura para resultado de función.
 */
-copia_resultado(tam)
+void copia_resultado(tam)
   int tam;
 {
   struct nodo *izq;
@@ -1140,7 +1142,7 @@ copia_resultado(tam)
   crea_nodo(N_COPIA, ultimo_nodo, izq, tam);
 }
 
-asigna(nodo, posicion, tipo)
+void asigna(nodo, posicion, tipo)
   struct nodo *nodo;
   int posicion;
   unsigned char *tipo;
@@ -1160,7 +1162,7 @@ asigna(nodo, posicion, tipo)
 /*
 ** Genera una instrucción con operando.
 */
-ins(codigo, valor)
+void ins(codigo, valor)
   unsigned char *codigo;
   int valor;
 {
@@ -1172,7 +1174,7 @@ ins(codigo, valor)
 /*
 ** Comienza una linea de comentarios para el ensamblador.
 */
-comentario()
+void comentario()
 {
   emite_car(';');
 }
@@ -1180,7 +1182,7 @@ comentario()
 /*
 ** Pone el prologo para el codigo generado.
 */
-prologo()
+void prologo()
 {
   comentario();
   emite_texto(PROGRAMA);
@@ -1194,7 +1196,7 @@ prologo()
 /*
 ** Pone el epilogo para el codigo generado.
 */
-epilogo()
+void epilogo()
 {
   int temp;
   int pos, byte;
@@ -1260,7 +1262,7 @@ epilogo()
 ** LIB_CUSHORT  Carga un entero de tipo short sin signo.
 ** LIB_GSHORT   Almacena un entero de tipo short.
 */
-libreria()
+void libreria()
 {
   emite_texto("LIB_CSHORT:\nldl 1\nlb\nldl 1\nadc 1\n");
   emite_texto("lb\nldc 8\nshl\nor\nldc 0x8000\nxword\n");
@@ -1276,7 +1278,7 @@ libreria()
 ** Emite un nombre que no entre en conflicto con las
 ** palabras reservadas del ensamblador.
 */
-emite_nombre(nombre)
+void emite_nombre(nombre)
   unsigned char *nombre;
 {
   emite_texto("q");
@@ -1286,12 +1288,15 @@ emite_nombre(nombre)
 /*
 ** Salva el registro A en la pila.
 */
-salva(flotante)
+void salva(flotante)
   int flotante;
 {
-  if (flotante) {
+  if (flotante == 1) {
     emite_texto("ajw -2\nldlp 0\nfpstnldb\n");
     pila -= 2;
+  } else if (flotante == 2) {
+    emite_texto("ajw -2\nldlp 0\nfpstnlsn\n");
+    --pila;
   } else {
     emite_texto("ajw -1\nstl 0\n");
     --pila;
@@ -1301,7 +1306,7 @@ salva(flotante)
 /*
 ** Recupera el registro A desde la pila.
 */
-recupera(flotante)
+void recupera(flotante)
   int flotante;
 {
   if (flotante) {
@@ -1312,8 +1317,19 @@ recupera(flotante)
       emite_linea("fpldnladddb");
     else if (flotante == 3)
       emite_linea("fpldnlmuldb");
-    emite_linea("ajw 2");
-    pila += 2;
+    else if (flotante == 4)
+      emite_linea("fpldnlsn");
+    else if (flotante == 5)
+      emite_linea("fpldnladdsn");
+    else if (flotante == 6)
+      emite_linea("fpldnlmulsn");
+    if (flotante < 4) {
+      emite_linea("ajw 2");
+      pila += 2;
+    } else {
+      emite_linea("ajw 1");
+      ++pila;
+    }
   } else {
     emite_texto("ldl 0\najw 1\n");
     ++pila;
@@ -1323,7 +1339,7 @@ recupera(flotante)
 /*
 ** Copia un registro entero o de punto flotante.
 */
-copia_reg(flotante)
+void copia_reg(flotante)
   int flotante;
 {
   if (flotante)
@@ -1335,7 +1351,7 @@ copia_reg(flotante)
 /*
 ** Llama a la función especificada.
 */
-llamada(nombre)
+void llamada(nombre)
   unsigned char *nombre;
 {
   emite_texto("call ");
@@ -1346,7 +1362,7 @@ llamada(nombre)
 /*
 ** Retorna de una función.
 */
-retorno()
+void retorno()
 {
   emite_linea("ret");
 }
@@ -1354,7 +1370,7 @@ retorno()
 /*
 ** Salta a la etiqueta interna especificada.
 */
-salto(etiq)
+void salto(etiq)
   int etiq;
 {
   ins("j c", etiq);
@@ -1363,7 +1379,7 @@ salto(etiq)
 /*
 ** Prueba el registro A y salta si es falso.
 */
-salta_si_falso(etiq)
+void salta_si_falso(etiq)
   int etiq;
 {
   ins("cj c", etiq);
@@ -1372,7 +1388,7 @@ salta_si_falso(etiq)
 /*
 ** Ejecuta un salto no interrumpible.
 */
-salto_no_int(etiq)
+void salto_no_int(etiq)
   int etiq;
 {
   emite_linea("ldc 0");
@@ -1382,14 +1398,14 @@ salto_no_int(etiq)
 /*
 ** Imprime el número especificado cómo una etiqueta.
 */
-emite_etiq(etiq)
+void emite_etiq(etiq)
   int etiq;
 {
   emite_texto("c");
   emite_numero(etiq);
 }
 
-dos_puntos()
+void dos_puntos()
 {
   emite_car(58);
 }
@@ -1397,7 +1413,7 @@ dos_puntos()
 /*
 ** Seudo-operacion para definir un byte.
 */
-def_byte()
+void def_byte()
 {
   emite_texto("db ");
 }
@@ -1405,7 +1421,7 @@ def_byte()
 /*
 ** Desplaza la posición de la pila.
 */
-desp_pila(nueva_pos)
+int desp_pila(nueva_pos)
   int nueva_pos;
 {
   int k;
@@ -1419,7 +1435,7 @@ desp_pila(nueva_pos)
 ** Hace una comparación y un salto. (para switch)
 ** No pierde el valor con el que esta comparando.
 */
-compara_y_salta(valor, etiqueta)
+void compara_y_salta(valor, etiqueta)
   int valor, etiqueta;
 {
   emite_linea("dup");
@@ -1431,7 +1447,7 @@ compara_y_salta(valor, etiqueta)
 /*
 ** Vacia el almacenamiento de cadenas
 */
-vacia_lits()
+void vacia_lits()
 {
   int j, k;
 
