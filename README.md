@@ -2,7 +2,7 @@
 
 ## by Oscar Toledo G. [https://nanochess.org](https://nanochess.org)
 
-This is an improved version of my transputer C compiler (the same embedded inside my full operating system) but with the following enhancements:
+This is an improved version of my transputer C compiler (the same embedded inside my [full operating system](https://github.com/nanochess/transputer)) but with the following enhancements:
 
 Already available in the cc0 branch:
 
