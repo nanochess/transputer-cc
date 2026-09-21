@@ -22,6 +22,8 @@ Exclusive of this branch cc2:
 
 I've made an effort to pass all these independent backups as commits in the repository history. It certainly helped me to put these in perspective. Also I preserved the modification dates to relate these to my Am29000 C compiler.
 
+A complete article on the process of making portable this C compiler is available in this article [https://nanochess.org/transputer_c_compiler.html](https://nanochess.org/transputer_c_compiler.html)
+
 ## How to use it
 
 For compiling in a normal command-line environment:
