@@ -1,5 +1,5 @@
 /*
-** Compilador de C para el G10.
+** Compilador de C para transputer.
 ** Generador de Codigo.
 **
 ** por Oscar Toledo Gutiérrez.

@@ -1,5 +1,5 @@
 /*
-** Compilador de C para el G10.
+** Compilador de C para transputer.
 ** Análisis sintáctico de alto nivel.
 **
 ** por Oscar Toledo Gutiérrez.

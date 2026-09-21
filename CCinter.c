@@ -1,5 +1,5 @@
 /*
-** Compilador de C para el G10.
+** Compilador de C para transputer.
 ** Interfaz con el usuario.
 **
 ** por Oscar Toledo Gutiérrez.

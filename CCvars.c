@@ -1,5 +1,5 @@
 /*
-** Compilador de C para el G10.
+** Compilador de C para transputer.
 ** Definiciones de variables.
 **
 ** por Oscar Toledo Gutiérrez.

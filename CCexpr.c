@@ -1,5 +1,5 @@
 /*
-** Compilador de C para el G10.
+** Compilador de C para transputer.
 ** Evaluador de Expresiones.
 **
 ** por Oscar Toledo Gutiérrez.
