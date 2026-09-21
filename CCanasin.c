@@ -43,7 +43,7 @@
 **                                     de un problema de tipos en p_estructura.
 ** Revisión: 24 de noviembre de 1995. Corrección de varios defectos en
 **                                    tipos_args().
-** Revisión: 24 de noviembre de 1995. Optimación de la salida de s_if().
+** Revisión: 24 de noviembre de 1995. optimización de la salida de s_if().
 ** Revisión: 28 de diciembre de 1995. Corrección de un defecto en el análisis
 **                                    de la sintaxis de do-while.
 ** Revisión: 28 de diciembre de 1995. Ahora soporta declaraciones dentro de un
@@ -64,6 +64,7 @@
 ** Revisión: 20 de junio de 1996. Detección de variables locales redefinidas.
 ** Revisión: 12 de octubre de 1996. Optimiza estructuras que usan matrices
 **                                  de caracteres.
+** Revisión: 7 de mayo de 1998. Soporte para árboles dinámicos de expresiones.
 */
 
 /*
@@ -76,11 +77,11 @@
 analiza()
 {
   while (eof == 0) {    /* Trabaja hasta que no haya más entrada */
-    if(amatch("typedef", 7))
+    if (amatch("typedef", 7))
       decl_typedef(NO);
     else {
-      if(amatch("static", 6)) ;
-      else if(amatch("register", 8)
+      if (amatch("static", 6)) ;
+      else if (amatch("register", 8)
            || amatch("auto", 4))
         error("Sólo se acepta static");
       decl_glb();
@@ -103,21 +104,21 @@ decl_typedef(local)
   while (1) {
     if (fin_sentencia())
       break;
-    if(p_tipo_2(nombre))
+    if (p_tipo_2(nombre))
       pide(")");
-    if(*tipo_proc == FUNCION)
+    if (*tipo_proc == FUNCION)
       error("No se puede definir un tipo de función");
-    if(local)
+    if (local)
       chequeo = busca_loc(nombre);
     else
       chequeo = busca_glb(nombre);
-    if(chequeo)
+    if (chequeo)
       redefinido(nombre);
-    if(local)
+    if (local)
       nueva_loc(nombre, TYPEDEF, AUTO, tipo_proc, 0);
     else
       nueva_glb(nombre, TYPEDEF, STATIC, tipo_proc, 0);
-    if(match(",") == 0)
+    if (match(",") == 0)
       break;
   }
   punto_y_coma();
@@ -144,11 +145,11 @@ decl_glb()
       espacios();
       if (*(tipo_proc + 1) == FLOAT)
         *(tipo_proc + 1) = DOUBLE;
-      if(p == 0 && (car_act == ';' || car_act == ',')) {
-        if(chequeo = busca_glb(nombre)) {
-          if(chequeo[IDENT] != FUNCION)
+      if (p == 0 && (car_act == ';' || car_act == ',')) {
+        if (chequeo = busca_glb(nombre)) {
+          if (chequeo[IDENT] != FUNCION)
             redefinido(nombre);
-          else if(chequeo[POSICION] != FUNC_REF)
+          else if (chequeo[POSICION] != FUNC_REF)
             redefinido(nombre);
           else {
             chequeo[POSICION] = FUNC_TIPO;
@@ -181,15 +182,16 @@ decl_loc()
   unsigned char nombre[TAM_NOMBRE];
   unsigned char *salva_tipo_basico, *salva_tipo_proc;
   unsigned char *tipo_expr, *chequeo;
-  int pila2, p, sin_int, estaticas, nodo_expr;
+  int pila2, p, sin_int, estaticas;
   int tam_total, donde;
+  struct nodo *nodo_expr;
 
   pila2 = pila;
   while (1) {
     sin_int = estaticas = NO;
-    if(amatch("register", 8)
+    if (amatch("register", 8)
     || amatch("auto", 4)) sin_int = SI;
-    else if(amatch("static", 6))
+    else if (amatch("static", 6))
       sin_int = estaticas = SI;
     if (p_tipo_1(sin_int) == 0)
       break;
@@ -227,7 +229,7 @@ decl_loc()
           pila2 -= (tam_tipo(tipo_proc) + 3) / 4;
           donde = pila2;
         }
-        if(*tipo_proc != STRUCT && *tipo_proc != MATRIZ && match("=")) {
+        if (*tipo_proc != STRUCT && *tipo_proc != MATRIZ && match("=")) {
           salva_tipo_basico = tipo_basico;
           salva_tipo_proc = tipo_proc;
           usa_expr = SI;
@@ -236,12 +238,13 @@ decl_loc()
           tipo_proc = salva_tipo_proc;
           tipo_basico = salva_tipo_basico;
           convierte_tipo(&nodo_expr, tipo_expr, tipo_proc);
-          if(vars_inicializadas == MAX_INIC) {
+          if (vars_inicializadas == MAX_INIC) {
             error("Demasiadas variables inicializadas");
           } else {
-            nodo_inic[vars_inicializadas++] = nodo_expr;
-            nodo_inic[vars_inicializadas++] = donde;
-            nodo_inic[vars_inicializadas++] = tipo_proc;
+            nodo_inic[vars_inicializadas].raiz = nodo_expr;
+            nodo_inic[vars_inicializadas].donde = donde;
+            nodo_inic[vars_inicializadas].tipo = tipo_proc;
+            vars_inicializadas++;
           }
         }
         nueva_loc(nombre, VARIABLE, AUTO, tipo_proc, donde);
@@ -260,10 +263,12 @@ decl_loc()
 inic_loc()
 {
   int cuenta;
+
   cuenta = 0;
-  while(cuenta < vars_inicializadas) {
-    asigna(nodo_inic[cuenta], nodo_inic[cuenta+1], nodo_inic[cuenta+2]);
-    cuenta += 3;
+  while (cuenta < vars_inicializadas) {
+    asigna(nodo_inic[cuenta].raiz, nodo_inic[cuenta].donde, nodo_inic[cuenta].tipo);
+    libera_arbol(nodo_inic[cuenta].raiz);
+    cuenta++;
   }
 }
 
@@ -343,10 +348,10 @@ p_tipo_1(sin_int)
   }
   espacios();
   salva_posicion = pos_linea;
-  if(nombre_legal(nombre)) {
-    if((chequeo = busca_loc(nombre))
+  if (nombre_legal(nombre)) {
+    if ((chequeo = busca_loc(nombre))
     || (chequeo = busca_glb(nombre))) {
-      if(chequeo[IDENT] == TYPEDEF) {
+      if (chequeo[IDENT] == TYPEDEF) {
         tipo_basico = lee_entero(chequeo + TIPO);
         return 1;
       }
@@ -386,8 +391,8 @@ copia_tipo(tipo)
   unsigned char *tipo;
 {
   int a;
-  while(*tipo >= APUNTADOR) {
-    if(*tipo == MATRIZ) {
+  while (*tipo >= APUNTADOR) {
+    if (*tipo == MATRIZ) {
       guarda_tipo(*tipo++);
       guarda_tipo(*tipo++);
       guarda_tipo(*tipo++);
@@ -396,7 +401,7 @@ copia_tipo(tipo)
     } else
       guarda_tipo(*tipo++);
   }
-  if(*tipo == STRUCT) {
+  if (*tipo == STRUCT) {
     guarda_tipo(*tipo++);
     guarda_tipo(*tipo++);
     guarda_tipo(*tipo++);
@@ -411,7 +416,7 @@ copia_tipo(tipo)
 guarda_tipo(byte)
   int byte;
 {
-  if(sig_tipo >= MAX_TIPOS) {
+  if (sig_tipo >= MAX_TIPOS) {
     error("Tabla de tipos llena");
     cancela();
   }
@@ -426,28 +431,28 @@ p_tipo_3(nombre, decoracion, anidamiento)
   int *decoracion, anidamiento;
 {
   int p, tam;
-  if(match("*")) {
+  if (match("*")) {
     p = p_tipo_3(nombre, decoracion, anidamiento);
     *decoracion = 1;
     guarda_tipo(APUNTADOR);
     return p;
   }
-  if(match("(")) {
-    if(nombre == NULL && match(")")) {
+  if (match("(")) {
+    if (nombre == NULL && match(")")) {
       *decoracion = 1;
       guarda_tipo(FUNCION);
       return 0;
     }
     p = p_tipo_3(nombre, decoracion, 1);
     pide(")");
-  } else if(nombre != NULL) {
-    if(nombre_legal(nombre) == 0)
+  } else if (nombre != NULL) {
+    if (nombre_legal(nombre) == 0)
       nombre_ilegal();
   }
-  if(match("(")) {
+  if (match("(")) {
     *decoracion = 1;
-    if(anidamiento == 0 && nombre != NULL) {
-      if(match(")") == 0)
+    if (anidamiento == 0 && nombre != NULL) {
+      if (match(")") == 0)
         p = 1;
       else
         p = 0;
@@ -456,7 +461,7 @@ p_tipo_3(nombre, decoracion, anidamiento)
     guarda_tipo(FUNCION);
     return p;
   }
-  while(match("[")) {
+  while (match("[")) {
     *decoracion = 1;
     tam = subindice();
     guarda_tipo(MATRIZ);
@@ -482,16 +487,16 @@ p_estructura(es_union)
   int posicion, tam, numero_bits;
   unsigned char *tipo_optimo;
 
-  if(nombre_legal(rotulo)) {
-    if((estructura = busca_estructura(rotulo)) != NULL) {
-      if(estructura[EST_QUE_ES] == ENUM)
+  if (nombre_legal(rotulo)) {
+    if ((estructura = busca_estructura(rotulo)) != NULL) {
+      if (estructura[EST_QUE_ES] == ENUM)
         redefinido(rotulo);
-      if(es_union != estructura[EST_ES_UNION])
-        if(es_union)
+      if (es_union != estructura[EST_ES_UNION])
+        if (es_union)
           error("Se uso union en lugar de struct");
         else
           error("Se uso struct en lugar de union");
-      if(lee_entero(estructura + EST_TAM)) {
+      if (lee_entero(estructura + EST_TAM)) {
         tipo_basico = sig_tipo;
         guarda_tipo(STRUCT);
         posicion = estructura;
@@ -511,7 +516,7 @@ p_estructura(es_union)
     estructura[EST_QUE_ES] = STRUCT;
     estructura[EST_ES_UNION] = es_union;
   }
-  if(match("{") == 0) {
+  if (match("{") == 0) {
     tipo_basico = sig_tipo;
     guarda_tipo(STRUCT);
     posicion = estructura;
@@ -523,45 +528,45 @@ p_estructura(es_union)
   }
   lista = NULL;
   posicion = tam = 0;
-  while(p_tipo_1(NO)) {
-    while(1) {
-      if(es_union)
+  while (p_tipo_1(NO)) {
+    while (1) {
+      if (es_union)
         posicion = 0;
-      if(fin_sentencia())
+      if (fin_sentencia())
         break;
       numero_bits = 0;
-      if(match(":")) {
+      if (match(":")) {
         *nombre_miembro = 0;
         numero_bits = expr_constante();
-        if(tipo_basico != t_int && tipo_basico != t_uint)
+        if (tipo_basico != t_int && tipo_basico != t_uint)
           error("No es de tipo int o unsigned int");
-        if(numero_bits > 32)
+        if (numero_bits > 32)
           error("Más de 32 bits en el miembro");
-        if(numero_bits == 0) {
+        if (numero_bits == 0) {
           posicion = ((posicion + 3) & ~3) + 4;
-        } else if(numero_bits > 16) {
+        } else if (numero_bits > 16) {
           posicion += 4;
-        } else if(numero_bits > 8) {
+        } else if (numero_bits > 8) {
           posicion += 2;
         } else {
           posicion++;
         }
       } else {
-        if(p_tipo_2(nombre_miembro))
+        if (p_tipo_2(nombre_miembro))
           pide(")");
-        if(match(":")) {
+        if (match(":")) {
           numero_bits = expr_constante();
-          if(tipo_proc != t_int && tipo_proc != t_uint)
+          if (tipo_proc != t_int && tipo_proc != t_uint)
             error("No es de tipo int o unsigned int");
-          if(numero_bits == 0)
+          if (numero_bits == 0)
             error("Miembro vacio");
-          if(numero_bits > 32)
+          if (numero_bits > 32)
             error("Más de 32 bits en el miembro");
-          if(numero_bits > 16) {
+          if (numero_bits > 16) {
             posicion = (posicion + 3) & ~3;
-          } else if(numero_bits > 8) {
+          } else if (numero_bits > 8) {
             posicion = (posicion + 1) & ~1;
-            if(tipo_proc == t_int)
+            if (tipo_proc == t_int)
               tipo_proc = t_short;
             else
               tipo_proc = t_ushort;
@@ -573,14 +578,14 @@ p_estructura(es_union)
           tipo_optimo = tipo_proc;
           while (*tipo_optimo == MATRIZ)
             tipo_optimo += 5;
-          if(*tipo_optimo == *t_short || *tipo_optimo == *t_ushort)
+          if (*tipo_optimo == *t_short || *tipo_optimo == *t_ushort)
             posicion = (posicion + 1) & ~1;
-          else if(*tipo_optimo != *t_char)
+          else if (*tipo_optimo != *t_char)
             posicion = (posicion + 3) & ~3;
         }
       }
-      if(*nombre_miembro) {
-        if(miembro = busca_miembro(lista, nombre_miembro))
+      if (*nombre_miembro) {
+        if (miembro = busca_miembro(lista, nombre_miembro))
           redefinido(nombre_miembro);
         else
           miembro = nuevo_miembro(&lista, nombre_miembro);
@@ -588,19 +593,19 @@ p_estructura(es_union)
         escribe_entero(miembro + MIE_POSICION, posicion);
         posicion += tam_tipo(tipo_proc);
       }
-      if(es_union)
+      if (es_union)
         tam = (posicion > tam) ? posicion : tam;
       else
         tam = posicion;
-      if(match(",") == 0) break;
+      if (match(",") == 0) break;
     }
     punto_y_coma();
   }
-  if(lista != NULL)
+  if (lista != NULL)
     escribe_entero(estructura + EST_LISTA, lista);
   escribe_entero(estructura + EST_TAM, tam);
-  if(tam == 0)
-    if(es_union) error("Unión vacia");
+  if (tam == 0)
+    if (es_union) error("Unión vacia");
     else error("Estructura vacia");
   tipo_basico = sig_tipo;
   guarda_tipo(STRUCT);
@@ -622,11 +627,11 @@ p_enumerador()
   unsigned char *enumerador;
   int valor;
 
-  if(nombre_legal(rotulo)) {
-    if((enumerador = busca_estructura(rotulo)) != NULL) {
-      if(enumerador[EST_QUE_ES] != ENUM)
+  if (nombre_legal(rotulo)) {
+    if ((enumerador = busca_estructura(rotulo)) != NULL) {
+      if (enumerador[EST_QUE_ES] != ENUM)
         redefinido(rotulo);
-      if(lee_entero(enumerador + EST_TAM)) {
+      if (lee_entero(enumerador + EST_TAM)) {
         tipo_basico = t_int;
         return;
       }
@@ -638,22 +643,22 @@ p_enumerador()
     enumerador = nueva_estructura("");
     enumerador[EST_QUE_ES] = ENUM;
   }
-  if(match("{") == 0) {
+  if (match("{") == 0) {
     tipo_basico = t_int;
     return;
   }
   escribe_entero(enumerador + EST_TAM, 1);
   valor = 0;
-  while(1) {
-    if(nombre_legal(nombre_miembro) == 0)
+  while (1) {
+    if (nombre_legal(nombre_miembro) == 0)
       break;
-    if(match("="))
+    if (match("="))
       valor = expr_constante();
-    if(busca_enum(nombre_miembro) != NULL)
+    if (busca_enum(nombre_miembro) != NULL)
       redefinido(nombre_miembro);
     else
       nuevo_enum(nombre_miembro, valor);
-    if(match(",") == 0)
+    if (match(",") == 0)
       break;
   }
   pide("}");
@@ -681,11 +686,11 @@ tam_tipo(tipo)
                  error("Uso incorrecto de tipo de función");
                  return 0;
     case MATRIZ: tam = lee_entero(tipo + 1);
-                 if(tam == 0)
+                 if (tam == 0)
                    error("Tamaño nulo de matriz");
                  return tam_tipo(tipo + 5) * tam;
     case STRUCT: tam = lee_entero(lee_entero(tipo + 1) + EST_TAM);
-                 if(tam == 0)
+                 if (tam == 0)
                    error("Estructura o unión incompleta");
                  return (tam + 3) & ~3;
   }
@@ -731,7 +736,7 @@ nueva_func(n, parentesis)
   comienzo_funcion = linea_actual;
   dentro_funcion = SI;          /* Indica que esta dentro de una función */
                                 /* ¿ Ya estaba en la tabla de nombres ? */
-  if(funcion_actual = busca_glb(n)) {
+  if (funcion_actual = busca_glb(n)) {
     if (funcion_actual[IDENT] != FUNCION)
       redefinido(n);            /* Ya hay una variable con ese nombre */
     else if (funcion_actual[POSICION] == FUNC_DEF)
@@ -760,7 +765,7 @@ nueva_func(n, parentesis)
 
   ap_loc = INICIO_LOC;          /* Limpia la tabla de variables locales */
   pila_args = 0;                /* Inicia la cuenta de argumentos */
-  while(parentesis
+  while (parentesis
     && (match(")") == 0)) {     /* Empieza a contar */
 
     /* Cualquier nombre legal incrementa la cuenta */
@@ -813,7 +818,7 @@ nueva_func(n, parentesis)
   /* Procesa una sentencia, si es un retorno */
   /* entonces no limpia la pila */
 
-  if(sentencia() != E_RETURN) {
+  if (sentencia() != E_RETURN) {
     desp_pila(0);
     retorno();
   }
@@ -835,23 +840,23 @@ tipos_args()
 
   while (1) {
     p = p_tipo_2(n);
-    if(*tipo_proc == FUNCION) {
-      if(p) pide(")");
+    if (*tipo_proc == FUNCION) {
+      if (p) pide(")");
       error("No se puede usar una función cómo argumento");
     }
-    if(*tipo_proc == MATRIZ) {
+    if (*tipo_proc == MATRIZ) {
       nuevo_tipo = sig_tipo;
       guarda_tipo(APUNTADOR);
       copia_tipo(tipo_proc + 5);
       tipo_proc = nuevo_tipo;
     }
-    if(*tipo_proc == FLOAT)
+    if (*tipo_proc == FLOAT)
       tipo_proc = t_double;
     if (ap_arg = busca_loc(n)) {
 
        /* Pone el tipo correcto al argumento */
 
-      if(lee_entero(ap_arg + TIPO))
+      if (lee_entero(ap_arg + TIPO))
         error("Argumento redefinido");
       escribe_entero(ap_arg + TIPO, tipo_proc);
     } else
@@ -876,23 +881,23 @@ ordena_args(cuantos)
   args[0] = NO;
   args[1] = NO;
   tipo_func = lee_entero(funcion_actual + TIPO);
-  if(*++tipo_func != STRUCT)    /* El primer byte es FUNCION */
+  if (*++tipo_func != STRUCT)    /* El primer byte es FUNCION */
     pos = 2;                    /* Función comun */
   else {
     args[0] = SI;               /* Separa espacio para el resultado */
     pos = 4 + (tam_tipo(tipo_func) + 3) / 4;
   }
   ap_arg = INICIO_LOC;
-  while(cuantos--) {
+  while (cuantos--) {
     tipo = lee_entero(ap_arg + TIPO);
-    if(*tipo == STRUCT || *tipo == DOUBLE) {
-      if(pos < 4)
+    if (*tipo == STRUCT || *tipo == DOUBLE) {
+      if (pos < 4)
         pos = 4;
     }
     escribe_entero(ap_arg + POSICION, pos);
-    if(*tipo == STRUCT)
+    if (*tipo == STRUCT)
       pos += (tam_tipo(tipo) + 3) / 4;
-    else if(*tipo == DOUBLE)
+    else if (*tipo == DOUBLE)
       pos += 2;
     else {
       if (pos == 2)
@@ -986,12 +991,13 @@ punto_y_coma()
 */
 p_bloque()
 {
-  int p, nodo_vars, c_dentro_switch;
+  int p, c_dentro_switch;
+  struct nodo *nodo_vars;
   unsigned char *local, *local2, *local3;
   unsigned char *pos_tipo;
 
   c_dentro_switch = dentro_switch;
-  if(nivel - dentro_switch >= 1)
+  if (nivel - dentro_switch >= 1)
     dentro_switch = 0;          /* Vuelve a permitir declaraciones */
   pos_tipo = sig_tipo;          /* Tabla de tipos */
   local = ap_loc;               /* Variables locales */
@@ -1006,19 +1012,19 @@ p_bloque()
     sentencia();                /* Procesa sentencias */
   --nivel;                      /* Cierra el nivel */
   local2 = ap_loc;              /* Checa el número de vars. locales */
-  if(nivel) {                   /* Mantiene las etiquetas para goto */
+  if (nivel) {                   /* Mantiene las etiquetas para goto */
     ap_loc = local;
-    while(local < local2) {
+    while (local < local2) {
       local3 = local + TAM_SIM;
-      if(local[IDENT] == ETIQUETA) {
-        while(local < local3)
+      if (local[IDENT] == ETIQUETA) {
+        while (local < local3)
           *ap_loc++ = *local++;
       } else
         local = local3;
     }
   } else
     ap_loc = local;             /* Limpia las variables locales */
-  if((ultima_sentencia != E_RETURN) &&
+  if ((ultima_sentencia != E_RETURN) &&
      (ultima_sentencia != E_BREAK) &&
      (ultima_sentencia != E_CONT))
     pila = desp_pila(p);        /* Limpia la pila */
@@ -1047,7 +1053,7 @@ s_if()
     return;                     /* Y vuelve */
   }
                                 /* Una sentencia "if...else" */
-  if((ultima_sentencia != E_RETURN) &&
+  if ((ultima_sentencia != E_RETURN) &&
      (ultima_sentencia != E_BREAK) &&
      (ultima_sentencia != E_CONT))
     salto(etiq2 = nueva_etiq);  /* Salta alrededor del codigo de else */
@@ -1057,7 +1063,7 @@ s_if()
   dos_puntos();
   emite_nueva_linea();          /* Imprime etiqueta falsa */
   sentencia();                  /* Procesa el else */
-  if(etiq2) {
+  if (etiq2) {
     emite_etiq(etiq2);
     dos_puntos();
     emite_nueva_linea();        /* Imprime etiqueta verdadera */
@@ -1079,7 +1085,7 @@ s_while()
   emite_nueva_linea();
   prueba(bucle[B_FIN], SI);        /* Checa la expresión */
   sentencia();                     /* Procesa una sentencia */
-  if((ultima_sentencia != E_RETURN) &&
+  if ((ultima_sentencia != E_RETURN) &&
      (ultima_sentencia != E_CONT) &&
      (ultima_sentencia != E_BREAK))
     salto(bucle[B_BUCLE]);         /* Vuelve al bucle */
@@ -1103,7 +1109,7 @@ s_do()
   dos_puntos();
   emite_nueva_linea();
   sentencia();                     /* Procesa una sentencia */
-  if(amatch("while", 5) == 0)
+  if (amatch("while", 5) == 0)
     error("Falta el while");
   prueba(bucle[B_FIN], SI);        /* Checa la expresión */
   salto(bucle[B_BUCLE]);
@@ -1120,14 +1126,15 @@ s_for()
 {
   int bucle[4];
   int *anterior;
-  int etiq, origen;
+  int etiq;
+  struct nodo *origen;
   int expr;
 
   anterior = ultimo_bucle;
   nuevo_bucle(bucle);
   etiq = nueva_etiq;
   pide("(");
-  if(match(";") == 0) {
+  if (match(";") == 0) {
     usa_expr = NO;
     expresion();
     punto_y_coma();
@@ -1135,11 +1142,11 @@ s_for()
   emite_etiq(etiq);
   dos_puntos();
   emite_nueva_linea();
-  if(match(";") == 0) {
+  if (match(";") == 0) {
     prueba(bucle[B_FIN], NO);
     punto_y_coma();
   }
-  if(match(")") == 0) {
+  if (match(")") == 0) {
     origen = ultimo_nodo;
     expr = SI;
     usa_expr = NO;
@@ -1151,9 +1158,10 @@ s_for()
   emite_etiq(bucle[B_BUCLE]);
   dos_puntos();
   emite_nueva_linea();
-  if(expr) {
+  if (expr) {
     usa_expr = NO;
     evalua_arbol(NO);
+    libera_arbol(ultimo_nodo);
     ultimo_nodo = origen;
   }
   salto(etiq);
@@ -1170,7 +1178,8 @@ s_switch()
 {
   int bucle[4];
   int *anterior;
-  int etiq, origen;
+  int etiq;
+  struct nodo *origen;
   int c_dentro_switch;
   int c_etiqueta_default;
   int *c_sig_case;
@@ -1193,7 +1202,7 @@ s_switch()
   pide(")");
   salto(etiq = nueva_etiq);
   sentencia();
-  if((ultima_sentencia != E_RETURN) &&
+  if ((ultima_sentencia != E_RETURN) &&
      (ultima_sentencia != E_CONT) &&
      (ultima_sentencia != E_BREAK))
     salto(bucle[B_FIN]);
@@ -1202,12 +1211,13 @@ s_switch()
   emite_nueva_linea();
   usa_expr = SI;
   evalua_arbol(NO);
+  libera_arbol(ultimo_nodo);
   ultimo_nodo = origen;
-  while(inicio_lista != sig_case) {
+  while (inicio_lista != sig_case) {
     compara_y_salta(*inicio_lista, *(inicio_lista+1));
     inicio_lista = inicio_lista + 2;
   }
-  if(etiqueta_default) {
+  if (etiqueta_default) {
     desp_pila(0);
     salto_no_int(etiqueta_default);
   }
@@ -1229,16 +1239,16 @@ s_case()
   int num;
   int *ultimo;
 
-  if(!dentro_switch)
+  if (!dentro_switch)
     error("El case no esta en un switch");
-  if(sig_case == casos + MAX_CASOS) {
+  if (sig_case == casos + MAX_CASOS) {
     error("Demasiados case");
     return;
   }
   num = expr_constante();       /* Busca el número */
   ultimo = inicio_lista;
-  while(ultimo != sig_case) {
-    if(*ultimo == num)
+  while (ultimo != sig_case) {
+    if (*ultimo == num)
       error("El valor del case esta repetido");
     ultimo += 2;
   }
@@ -1294,8 +1304,8 @@ p_etiqueta()
 
   espacios();
   c_pos_linea = pos_linea;
-  if(nombre_legal(n)) {
-    if(car_act == ':') {
+  if (nombre_legal(n)) {
+    if (car_act == ':') {
       pos_linea++;
       pos_pila = pila;
       pila = desp_pila(0);
@@ -1328,7 +1338,8 @@ agrega_etiqueta(nombre)
 */
 s_return()
 {
-  int origen, pila_retorno, nodo_expr;
+  int origen, pila_retorno;
+  struct nodo *nodo_expr;
   unsigned char *tipo, *tipo2;
 
   /* Checa si hay una expresión */
@@ -1337,25 +1348,27 @@ s_return()
     usa_expr = SI;
     tipo2 = almacena_expresion(SI);
     tipo = lee_entero(funcion_actual + TIPO);
-    if(*++tipo == STRUCT) {                /* el primer byte es FUNCION */
-      if(*tipo2 != STRUCT)
+    if (*++tipo == STRUCT) {                /* el primer byte es FUNCION */
+      if (*tipo2 != STRUCT)
         error("El resultado no tiene tipo de estructura");
-      else if(lee_entero(tipo + 1) != lee_entero(tipo2 + 1))
+      else if (lee_entero(tipo + 1) != lee_entero(tipo2 + 1))
         error("Estructuras incompatibles");
       copia_resultado(tam_tipo(tipo2));
       usa_expr = NO;
       evalua_arbol(NO);
+      libera_arbol(ultimo_nodo);
       ultimo_nodo = origen;
       desp_pila(0);
       retorno();
       return;
-    } else if(*tipo2 == STRUCT)
+    } else if (*tipo2 == STRUCT)
       error("La función no tiene tipo de estructura");
     else {
       nodo_expr = ultimo_nodo;
       convierte_tipo(&nodo_expr, tipo2, tipo);
     }
     evalua_arbol(NO);
+    libera_arbol(ultimo_nodo);
     ultimo_nodo = origen;
   }
   desp_pila(0);                 /* Limpia la pila */
@@ -1385,7 +1398,7 @@ s_cont()
 
   /* Ve si hay un bucle abierto */
   u_bucle = ultimo_bucle;
-  while(1) {
+  while (1) {
     if (u_bucle == NULL) {
       error("No hay ningun bucle abierto");
       return;                         /* No */

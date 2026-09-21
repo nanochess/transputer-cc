@@ -84,64 +84,99 @@
 ** Revisión: 20 de junio de 1996. Corrección de un defecto en la generación
 **                                de la dirección para N_COPIA, cuando N_COPIA
 **                                era descendiente de otro N_COPIA.
+** Revisión: 7 de mayo de 1998. Los árboles de expresiones ahora son
+**                              dinámicos, nueva función libera_arbol()
 */
+
+/*
+** Libera un arbol.
+*/
+libera_arbol(nodo)
+  struct nodo *nodo;
+{
+  int op;
+
+  op = nodo->oper;
+  if (nodo->izq != NULL)
+    libera_arbol(nodo->izq);
+  if ((op != N_INC) && (op != N_PINC) && (op != N_RESULTA)
+   && (op != N_PAR) && (op != N_PARF) && (nodo->der != NULL))
+    libera_arbol(nodo->der);
+  if ((op == N_FUNCI) || (op == N_PAR) || (op == N_PARF) ||
+      (op == N_TRI) || (op == N_RESULTA))
+    if (nodo->esp != NULL)
+      libera_arbol(nodo->esp);
+  free(nodo);
+}
 
 /*
 ** Crea un nodo del arbol de expresiones.
 */
 crea_nodo(op, izq, der, val)
-  int op, izq, der, val;
+  int op, val;
+  struct nodo *izq, *der;
 {
-  if(op == N_CSUMA) {
-    if(oper[izq] == N_CSUMA) {
-      val = val + esp[izq];
-      izq = nodo_izq[izq];
-    } else if(oper[izq] == N_LDNLP) {
-      val = val + esp[izq] * 4;
-      izq = nodo_izq[izq];
-    }
-    if(val % 4 == 0) {
-      op = N_LDNLP;
-      val = val / 4;
-    }
-  }
-  if(op == N_LDNLP) {
-    if(oper[izq] == N_LDNLP) {
-      val = val + esp[izq];
-      izq = nodo_izq[izq];
-    } else if(oper[izq] == N_LDLP) {
-      val = val + esp[izq];
-      izq = 0;
-      op = N_LDLP;
-    }
-  } else if(op == N_CIGUAL) {
-    if(val == 0) op = N_NOT;
-  } else if(op == N_CONVDF && oper[izq] == N_CEROPF) {
-    op = N_CEROF;
-    izq = 0;
-  }
-  ++ultimo_nodo;
-  if(ultimo_nodo == TAM_ARBOL) {
+  struct nodo *temp;
+
+  ultimo_nodo = malloc(sizeof(struct nodo));
+  if (ultimo_nodo == NULL) {
     error("Expresión muy compleja");
     cancela();
   }
-  nodo_izq[ultimo_nodo] = izq;
-  nodo_der[ultimo_nodo] = der;
-  oper[ultimo_nodo] = op;
-  esp[ultimo_nodo] = val;
-  regs[ultimo_nodo] = 0;
-  regsf[ultimo_nodo] = 0;
+  if (op == N_CSUMA) {
+    if (izq->oper == N_CSUMA) {
+      temp = izq;
+      val += izq->esp;
+      izq = izq->izq;
+      free(temp);
+    } else if (izq->oper == N_LDNLP) {
+      temp = izq;
+      val += izq->esp * 4;
+      izq = izq->izq;
+      free(temp);
+    }
+    if (val % 4 == 0) {
+      op = N_LDNLP;
+      val /= 4;
+    }
+  }
+  if (op == N_LDNLP) {
+    if (izq->oper == N_LDNLP) {
+      temp = izq;
+      val += izq->esp;
+      izq = izq->izq;
+      free(temp);
+    } else if (izq->oper == N_LDLP) {
+      val += izq->esp;
+      free(izq);
+      izq = NULL;
+      op = N_LDLP;
+    }
+  } else if (op == N_CIGUAL) {
+    if (val == 0)
+      op = N_NOT;
+  } else if (op == N_CONVDF && izq->oper == N_CEROPF) {
+    op = N_CEROF;
+    free(izq);
+    izq = NULL;
+  }
+  ultimo_nodo->izq = izq;
+  ultimo_nodo->der = der;
+  ultimo_nodo->oper = op;
+  ultimo_nodo->esp = val;
+  ultimo_nodo->regs = 0;
+  ultimo_nodo->regsf = 0;
 }
 
 /*
 ** Genera codigo para todo un arbol.
 */
 gen_codigo(nodo)
-  int nodo;
+  struct nodo *nodo;
 {
   raiz_arbol = nodo;
   etiqueta(nodo);
-  if(((oper[nodo] == N_ANDB) || (oper[nodo] == N_ORB)) && (es_control))
+  if (((nodo->oper == N_ANDB) || (nodo->oper == N_ORB)) && (es_control))
     corto_circuito(nodo, etiq_and, etiq_or);
   else
     gen_nodo(nodo);
@@ -154,95 +189,95 @@ gen_codigo(nodo)
 ** que requiere para evaluarse.
 */
 etiqueta(nodo)
-  int nodo;
+  struct nodo *nodo;
 {
   int min, max, op, req_res;
 
   req_res = (nodo != raiz_arbol) || (usa_expr == SI);
-  op = oper[nodo];
-  if (nodo_izq[nodo])
-    etiqueta(nodo_izq[nodo]);
+  op = nodo->oper;
+  if (nodo->izq != NULL)
+    etiqueta(nodo->izq);
   if ((op != N_INC) && (op != N_PINC) && (op != N_RESULTA)
-  && (op != N_PAR) && (op != N_PARF) && nodo_der[nodo])
-    etiqueta(nodo_der[nodo]);
+   && (op != N_PAR) && (op != N_PARF) && (nodo->der != NULL))
+    etiqueta(nodo->der);
   if ((op == N_FUNCI) || (op == N_PAR) || (op == N_PARF) ||
       (op == N_TRI) || (op == N_RESULTA))
-    if (esp[nodo])
-      etiqueta(esp[nodo]);
+    if (nodo->esp != NULL)
+      etiqueta(nodo->esp);
   if ((op == N_FUNCI) || (op == N_FUNC) ||
       (op == N_ANDB) || (op == N_ORB) ||
       (op == N_TRI) || (op == N_COMA) ||
       (op == N_COPIA)) {
-    regs[nodo] = 3;
-    regsf[nodo] = 3;
-  } else if(op >= N_ASIGNA && op <= N_AIXP) {
-    min = regs[nodo_izq[nodo]];
-    if (oper[nodo_izq[nodo]] == N_CONST && op == N_ASUMA)
+    nodo->regs = 3;
+    nodo->regsf = 3;
+  } else if (op >= N_ASIGNA && op <= N_AIXP) {
+    min = nodo->izq->regs;
+    if (nodo->izq->oper == N_CONST && op == N_ASUMA)
       min = 0;
-    max = regs[nodo_der[nodo]];
-    if (oper[nodo_der[nodo]] == N_LDLP && op == N_ASIGNA &&
-        esp[nodo_der[nodo]] != SHORT && esp[nodo_der[nodo]] != USHORT)
+    max = nodo->der->regs;
+    if (nodo->der->oper == N_LDLP && op == N_ASIGNA &&
+        nodo->der->esp != SHORT && nodo->der->esp != USHORT)
       max = 0;
     if (min > max)
       max = min;
     else if (min == max)
       max++;
-    if(req_res && esp[nodo] != FLOAT && esp[nodo] != DOUBLE)
+    if (req_res && nodo->esp != FLOAT && nodo->esp != DOUBLE)
       max++;
-    if(esp[nodo] == FLOAT)
+    if (nodo->esp == FLOAT)
       max++;
-    regs[nodo] = max;
-    min = regsf[nodo_izq[nodo]];
-    max = regsf[nodo_der[nodo]];
+    nodo->regs = max;
+    min = nodo->izq->regsf;
+    max = nodo->der->regsf;
     if (min > max)
       max = min;
     else if (min == max)
       max++;
-    if(req_res && (esp[nodo] == FLOAT || esp[nodo] == DOUBLE))
+    if (req_res && (nodo->esp == FLOAT || nodo->esp == DOUBLE))
       max++;
-    regsf[nodo] = max;
+    nodo->regsf = max;
   } else if ((op == N_INC) || (op == N_PINC)) {
-    max = regs[nodo_izq[nodo]];
-    if(oper[nodo_izq[nodo]] != N_LDLP ||
-       esp[nodo] == SHORT || esp[nodo] == USHORT)
+    max = nodo->izq->regs;
+    if (nodo->izq->oper != N_LDLP ||
+        nodo->esp == SHORT || nodo->esp == USHORT)
       max++;
-    if(req_res)
+    if (req_res)
       max++;
-    regs[nodo] = max;
-    regsf[nodo] = regsf[nodo_izq[nodo]];
+    nodo->regs = max;
+    nodo->regsf = nodo->izq->regsf;
   } else if (op == N_CEROPF || op == N_CEROF)
-    regsf[nodo] = 1;
+    nodo->regsf = 1;
   else if (op == N_NUMPF) {
-    regs[nodo] = 1;
-    regsf[nodo] = 1;
-  } else if (nodo_izq[nodo] == 0)
-    regs[nodo] = 1;
-  else if (nodo_der[nodo] == 0) {
-    regs[nodo] = regs[nodo_izq[nodo]];
-    regsf[nodo] = regsf[nodo_izq[nodo]];
-    if(op == N_CUENTA || op == N_PFENT)
-      regs[nodo]++;
-    if(op == N_ENTPF || op == N_ENTF || op == N_CFLOAT || op == N_CDOUBLE)
-      regsf[nodo]++;
+    nodo->regs = 1;
+    nodo->regsf = 1;
+  } else if (nodo->izq == 0)
+    nodo->regs = 1;
+  else if (nodo->der == 0) {
+    nodo->regs = nodo->izq->regs;
+    nodo->regsf = nodo->izq->regsf;
+    if (op == N_CUENTA || op == N_PFENT)
+      nodo->regs++;
+    if (op == N_ENTPF || op == N_ENTF || op == N_CFLOAT || op == N_CDOUBLE)
+      nodo->regsf++;
   } else {
-    min = regs[nodo_izq[nodo]];
-    max = regs[nodo_der[nodo]];
+    min = nodo->izq->regs;
+    max = nodo->der->regs;
     if (min > max)
       max = min;
     else if (min == max)
       max++;
-    if(op == N_SMAYOR)
+    if (op == N_SMAYOR)
       max++;
-    regs[nodo] = max;
-    min = regsf[nodo_izq[nodo]];
-    max = regsf[nodo_der[nodo]];
+    nodo->regs = max;
+    min = nodo->izq->regsf;
+    max = nodo->der->regsf;
     if (min > max)
       max = min;
     else if (min == max)
       max++;
-    regsf[nodo] = max;
-    if(op == N_IGUALPF || op == N_MAYORPF)
-      regs[nodo]++;
+    nodo->regsf = max;
+    if (op == N_IGUALPF || op == N_MAYORPF)
+      nodo->regs++;
   }
 }
 
@@ -347,306 +382,314 @@ gen_oper(oper, rev)
 ** Genera codigo para el nodo del arbol.
 */
 gen_nodo(nodo)
-  int nodo;
+  struct nodo *nodo;
 {
-  int temp, conteo, pals, par, rev, op, req, req_res;
-  int regb, regc, regbf, regcf, evitar_rev;
+  int conteo, pals, par, rev, op, req, req_res;
+  int regb, regc, regbf, regcf, evitar_rev, temp;
   int etiq_and, etiq_or, pila_extra, que_onda, reqf;
   int opt_conv;
+  struct nodo *nodo_temp, *nodo_b, *nodo_c;
 
   req_res = (nodo != raiz_arbol) || (usa_expr == SI);
-  op = oper[nodo];
+  op = nodo->oper;
   if ((op == N_FUNC) || (op == N_FUNCI)) {
     pals = conteo = 0;
-    regb = regc = 0;
-    temp = nodo_izq[nodo];
+    nodo_b = nodo_c = NULL;
+    nodo_temp = nodo->izq;
     req = SI;
     req_res = 0;                      /* Inicio de argumentos */
-    while (temp) {
-      if(oper[temp] == N_RESULTA) {   /* Función que retorna estructura */
-        pals += (req_res = nodo_der[temp]);
-        regb = -1;
+    while (nodo_temp != NULL) {
+      if (nodo_temp->oper == N_RESULTA) {  /* Función que retorna estructura */
+        pals += (req_res = nodo_temp->der);
+        nodo_b = -1;
         req = NO;
       } else {
-        if (nodo_der[temp])           /* garantiza que una estructura se */
+        if (nodo_temp->der)           /* garantiza que una estructura se */
           req = NO;                   /* alinea en la frontera de 4 palabras */
                                       /* después del call */
-        if (oper[temp] == N_PARF)     /* Garantiza que un parametro de tipo */
+        if (nodo_temp->oper == N_PARF)/* Garantiza que un parametro de tipo */
           req = NO;                   /* double se alinea en la frontera de */
                                       /* 4 palabras después del call */
-        if(regb == 0 && req)
-          regb = nodo_izq[temp];
-        else if(regc == 0 && req)
-          regc = nodo_izq[temp];
+        if (nodo_b == NULL && req)
+          nodo_b = nodo_temp->izq;
+        else if (nodo_c == NULL && req)
+          nodo_c = nodo_temp->izq;
         else {
-          if(nodo_der[temp] == 0) {
-            if(oper[temp] != N_PARF)
+          if (nodo_temp->der == NULL) {
+            if (nodo_temp->oper != N_PARF)
               pals++;                 /* parametro simple */
             else
               pals += 2;              /* parametro de tipo double */
           } else
-            pals += nodo_der[temp];   /* tamaño de la estructura */
+            pals += nodo_temp->der;   /* tamaño de la estructura */
           conteo++;
         }
       }
-      temp = esp[temp];
+      nodo_temp = nodo_temp->esp;
     }
     pila = desp_pila(pila - pals);    /* asigna espacio a los parametros */
-    if(conteo) {                      /* Procesa los parametros que no puede */
-      temp = nodo_izq[nodo];          /* poner en registros. */
-      if (regb)                       /* regb y regc pueden quedar sin uso, */
-        temp = esp[temp];             /* sólo si se pasa una estructura. */
-      if (regc)
-        temp = esp[temp];
+    if (conteo) {                     /* Procesa los parametros que no puede */
+      nodo_temp = nodo->izq;          /* poner en registros. */
+      if (nodo_b != NULL)             /* nodo_b y nodo_c pueden quedar sin uso, */
+        nodo_temp = nodo_temp->esp;   /* sólo si se pasa una estructura. */
+      if (nodo_c != NULL)
+        nodo_temp = nodo_temp->esp;
       par = req_res;
       while (conteo--) {
-        if(nodo_der[temp] == 0) {
-          if(oper[temp] != N_PARF) {  /* parametro simple */
-            gen_nodo(nodo_izq[temp]);
+        if (nodo_temp->der == NULL) {
+          if (nodo_temp->oper != N_PARF) { /* parametro simple */
+            gen_nodo(nodo_temp->izq);
             ins("stl ", par++);
           } else {
-            gen_nodo(nodo_izq[temp]);
+            gen_nodo(nodo_temp->izq);
             ins("ldlp ", par);
             emite_linea("fpstnldb");
             par += 2;
           }
         } else {                      /* estructura */
           pila_extra = pila;
-          estructura(nodo_izq[temp]);
+          estructura(nodo_temp->izq);
           ins("ldlp ", par - (pila - pila_extra));
-          ins("ldc ", nodo_der[temp] * 4);
+          ins("ldc ", (int) nodo_temp->der * 4);
           emite_linea("move");
           pila = desp_pila(pila_extra);
-          par += nodo_der[temp];
+          par += nodo_temp->der;
         }
-        temp = esp[temp];             /* siguiente parametro */
+        nodo_temp = nodo_temp->esp;             /* siguiente parametro */
       }
     }
     if (op == N_FUNC) {               /* función directa, se aceptan params. */
-      if(regc == 0) {                 /* en registros, seleccionar carga */
-        if(regb) {                    /* optima. */
-          if(regb == -1)
+      if (nodo_c == NULL) {           /* en registros, seleccionar carga */
+        if (nodo_b != NULL) {         /* óptima. */
+          if (nodo_b == -1)
             emite_linea("ldlp 0");
           else
-            gen_nodo(regb);
+            gen_nodo(nodo_b);
         }
       } else {
-        if(regb == -1) {
-          gen_nodo(regc);
+        if (nodo_b == -1) {
+          gen_nodo(nodo_c);
           emite_linea("ldlp 0");
-        } else if ((regs[regc] >= regs[regb]) &&
-            (regs[regb] < 3)) {
-          gen_nodo(regc);
-          gen_nodo(regb);
-        } else if ((regs[regb] > regs[regc]) &&
-                   (regs[regc] < 3)) {
-          gen_nodo(regb);
-          gen_nodo(regc);
+        } else if ((nodo_c->regs >= nodo_b->regs) &&
+                   (nodo_b->regs < 3)) {
+          gen_nodo(nodo_c);
+          gen_nodo(nodo_b);
+        } else if ((nodo_b->regs > nodo_c->regs) &&
+                   (nodo_c->regs < 3)) {
+          gen_nodo(nodo_b);
+          gen_nodo(nodo_c);
           emite_linea("rev");
         } else {
-          gen_nodo(regb);
+          gen_nodo(nodo_b);
           salva(0);
-          gen_nodo(regc);
+          gen_nodo(nodo_c);
           recupera(0);
         }
       }
       ins("ldl ", 1 - pila);
-      llamada(esp[nodo]);
+      llamada(nodo->esp);
     } else {                          /* Llamada indirecta, simular */
       pila = desp_pila(pila - 4);     /* llamada con parametros en regs. */
-      if(regb) {
-        if(regb == -1)
+      if (nodo_b != NULL) {
+        if (nodo_b == -1)
           emite_linea("ldlp 4");
         else
-          gen_nodo(regb);
+          gen_nodo(nodo_b);
         emite_linea("stl 2");
-        }
-      if(regc) {
-        gen_nodo(regc);
+      }
+      if (nodo_c != NULL) {
+        gen_nodo(nodo_c);
         emite_linea("stl 3");
-        }
-      gen_nodo(esp[nodo]);
+      }
+      gen_nodo(nodo->esp);
       ins("ldl ", 1 - pila);
       emite_texto("ldc 3\nldpi\nstl 0\nstl 1\ngcall\n");
       pila += 4;
     }
-    if(nodo_der[nodo])
+    if (nodo->der)
       emite_linea("ldlp 0");
     else
       pila = desp_pila(pila + pals);
     return;
   }
   if (op == N_ASIGNA) {
-    que_onda = (esp[nodo] == FLOAT || esp[nodo] == DOUBLE);
+    que_onda = (nodo->esp == FLOAT || nodo->esp == DOUBLE);
     opt_conv = NO;
-    if(req_res) {
+    if (req_res) {
       req = que_onda ? 1000000 : 2;
       reqf = que_onda ? 2 : 1000000;
     } else {
       req = que_onda ? 1000000 : 3;
       reqf = que_onda ? 3 : 1000000;
     }
-    if (regs[nodo_der[nodo]] < req
-     && regsf[nodo_der[nodo]] < reqf) {
-      if(oper[nodo_izq[nodo]] == N_PFENT && !req_res
-      && (esp[nodo] == INT || esp[nodo] == UINT)) {
+    if (nodo->der->regs < req
+     && nodo->der->regsf < reqf) {
+      if (nodo->izq->oper == N_PFENT && !req_res
+      && (nodo->esp == INT || nodo->esp == UINT)) {
         opt_conv = SI;
-        gen_nodo(nodo_izq[nodo_izq[nodo]]);
+        gen_nodo(nodo->izq->izq);
       } else
-        gen_nodo(nodo_izq[nodo]);
-      if(req_res)
+        gen_nodo(nodo->izq);
+      if (req_res)
         copia_reg(que_onda);
-      if(!opt_conv)
-        accesa_nodo(esp[nodo], nodo_der[nodo], NO);
+      if (!opt_conv)
+        accesa_nodo(nodo->esp, nodo->der, NO);
       else {
-        gen_nodo(nodo_der[nodo]);
+        gen_nodo(nodo->der);
         emite_linea("fpstnli32");
       }
       return;
     }
-    gen_nodo(nodo_der[nodo]);
+    gen_nodo(nodo->der);
     req = que_onda ? 3 : (req_res ? 2 : 3);
-    if (regs[nodo_izq[nodo]] < req) {
-      if(oper[nodo_izq[nodo]] == N_PFENT && !req_res
-      && (esp[nodo] == INT || esp[nodo] == UINT)) {
+    if (nodo->izq->regs < req) {
+      if (nodo->izq->oper == N_PFENT && !req_res
+      && (nodo->esp == INT || nodo->esp == UINT)) {
         opt_conv = SI;
-        gen_nodo(nodo_izq[nodo_izq[nodo]]);
+        gen_nodo(nodo->izq->izq);
       } else
-        gen_nodo(nodo_izq[nodo]);
-      if(req_res) {
+        gen_nodo(nodo->izq);
+      if (req_res) {
         copia_reg(que_onda);
-        if(!que_onda)
+        if (!que_onda)
           emite_linea("pop");
       }
-      if(!que_onda && !opt_conv)
+      if (!que_onda && !opt_conv)
         emite_linea("rev");
-      if(opt_conv) {
+      if (opt_conv) {
         emite_linea("fpstnli32");
         return;
       }
     } else {
       salva(0);
-      if(oper[nodo_izq[nodo]] == N_PFENT && !req_res
-      && (esp[nodo] == INT || esp[nodo] == UINT)) {
+      if (nodo->izq->oper == N_PFENT && !req_res
+      && (nodo->esp == INT || nodo->esp == UINT)) {
         opt_conv = SI;
-        gen_nodo(nodo_izq[nodo_izq[nodo]]);
+        gen_nodo(nodo->izq->izq);
       } else
-        gen_nodo(nodo_izq[nodo]);
-      if(req_res)
+        gen_nodo(nodo->izq);
+      if (req_res)
         copia_reg(que_onda);
       recupera(0);
-      if(opt_conv) {
+      if (opt_conv) {
         emite_linea("fpstnli32");
         return;
       }
     }
-    almacena(esp[nodo]);
+    almacena(nodo->esp);
     return;
   }
-  if(op > N_ASIGNA && op <= N_AIXP) {
-    que_onda = (esp[nodo] == FLOAT || esp[nodo] == DOUBLE);
-    regb = regs[nodo_izq[nodo]];
-    regc = regs[nodo_der[nodo]];
-    regbf = regsf[nodo_izq[nodo]];
-    regcf = regsf[nodo_der[nodo]];
+  if (op > N_ASIGNA && op <= N_AIXP) {
+    que_onda = (nodo->esp == FLOAT || nodo->esp == DOUBLE);
+    regb = nodo->izq->regs;
+    regc = nodo->der->regs;
+    regbf = nodo->izq->regsf;
+    regcf = nodo->der->regsf;
     rev = NO;
-    if(regc > 1) {    /* Esta es una dirección compleja */
-      if((oper[nodo_izq[nodo]] == N_CONST) && (op == N_ASUMA)) {
-        gen_nodo(nodo_der[nodo]);
+    if (regc > 1) {    /* Esta es una dirección compleja */
+      if ((nodo->izq->oper == N_CONST) && (op == N_ASUMA)) {
+        gen_nodo(nodo->der);
         emite_linea("dup");
-        carga(esp[nodo]);
+        carga(nodo->esp);
       } else {
-        if(regc < 3 && (regcf < 3 || !que_onda)) {
-          gen_nodo(nodo_izq[nodo]);
-          gen_nodo(nodo_der[nodo]);
-        } else if(regb < 3) {
-          gen_nodo(nodo_der[nodo]);
-          gen_nodo(nodo_izq[nodo]);
+        if (regc < 3 && (regcf < 3 || !que_onda)) {
+          gen_nodo(nodo->izq);
+          gen_nodo(nodo->der);
+        } else if (regb < 3) {
+          gen_nodo(nodo->der);
+          gen_nodo(nodo->izq);
           emite_linea("rev");
         } else {
-          gen_nodo(nodo_der[nodo]);
+          gen_nodo(nodo->der);
           salva(0);
-          gen_nodo(nodo_izq[nodo]);
+          gen_nodo(nodo->izq);
           recupera(0);
         }
         emite_linea("dup");
-        if(!que_onda)
+        if (!que_onda)
           emite_linea("pop");
-        carga(esp[nodo]);
+        carga(nodo->esp);
         rev = SI;
       }
     } else {          /* Una dirección simple */
-      if((oper[nodo_izq[nodo]] == N_CONST) && (op == N_ASUMA)) {
-        accesa_nodo(esp[nodo], nodo_der[nodo], SI);
-      } else if(regb < 3) {
-        accesa_nodo(esp[nodo], nodo_der[nodo], SI);
-        gen_nodo(nodo_izq[nodo]);
+      if ((nodo->izq->oper == N_CONST) && (op == N_ASUMA)) {
+        accesa_nodo(nodo->esp, nodo->der, SI);
+      } else if (regb < 3) {
+        accesa_nodo(nodo->esp, nodo->der, SI);
+        gen_nodo(nodo->izq);
         rev = NO;
       } else {
-        gen_nodo(nodo_izq[nodo]);
-        accesa_nodo(esp[nodo], nodo_der[nodo], SI);
+        gen_nodo(nodo->izq);
+        accesa_nodo(nodo->esp, nodo->der, SI);
         rev = SI;
       }
     }
-    if(op == N_AOR) emite_linea("or");
-    else if(op == N_AAND) emite_linea("and");
-    else if(op == N_AXOR) emite_linea("xor");
-    else if(op == N_ASUMA) {
-      if(oper[nodo_izq[nodo]] == N_CONST) {
-        if(temp = esp[nodo_izq[nodo]]) {
-          if(temp % 4 == 0)
+    if (op == N_AOR)
+      emite_linea("or");
+    else if (op == N_AAND)
+      emite_linea("and");
+    else if (op == N_AXOR)
+      emite_linea("xor");
+    else if (op == N_ASUMA) {
+      if (nodo->izq->oper == N_CONST) {
+        if (temp = nodo->izq->esp) {
+          if (temp % 4 == 0)
             ins("ldnlp ", temp / 4);
           else
             ins("adc ", temp);
         }
-      } else if(que_onda)
+      } else if (que_onda)
         emite_linea("fpadd");
       else
         emite_linea("bsub");
-    } else if(op == N_AMUL) {
+    } else if (op == N_AMUL) {
       if (que_onda)
         emite_linea("fpmul");
       else
         emite_linea("prod");
     } else {
-      if(rev) {
+      if (rev) {
         if (que_onda)
           emite_linea("fprev");
         else
           emite_linea("rev");
       }
-      if(op == N_ACI) emite_linea("shl");
-      else if(op == N_ACD) emite_linea("shr");
-      else if(op == N_ARESTA) {
+      if (op == N_ACI)
+        emite_linea("shl");
+      else if (op == N_ACD)
+        emite_linea("shr");
+      else if (op == N_ARESTA) {
         if (que_onda)
           emite_linea("fpsub");
         else
           emite_linea("diff");
-      } else if(op == N_ADIV) {
+      } else if (op == N_ADIV) {
         if (que_onda)
           emite_linea("fpdiv");
         else
           emite_linea("div");
-      } else if(op == N_AMOD) emite_linea("rem");
-      else if(op == N_AIXP) emite_linea("wsub");
+      } else if (op == N_AMOD)
+        emite_linea("rem");
+      else if (op == N_AIXP)
+        emite_linea("wsub");
     }
-    if(req_res)
+    if (req_res)
       copia_reg(que_onda);
-    if(regc > 1) {    /* Esta es una dirección compleja */
-      if(!que_onda) {
-        if(req_res)
+    if (regc > 1) {    /* Esta es una dirección compleja */
+      if (!que_onda) {
+        if (req_res)
           emite_linea("pop");
         emite_linea("rev");
       }
-      almacena(esp[nodo]);
+      almacena(nodo->esp);
     } else {          /* Una dirección simple */
-      accesa_nodo(esp[nodo], nodo_der[nodo], NO);
+      accesa_nodo(nodo->esp, nodo->der, NO);
     }
     return;
   }
   if (op == N_APFUNC) {
     emite_texto("ldc ");
-    emite_nombre(esp[nodo]);
+    emite_nombre(nodo->esp);
     emite_texto("-");
     emite_etiq(temp = nueva_etiq);
     emite_nueva_linea();
@@ -667,13 +710,13 @@ gen_nodo(nodo)
   if (op == N_NUMPF) {
     ins("ldl ", 1 - pila);
     ins("ldnl ", 2);
-    if(esp[nodo])
-      ins("ldnlp ", esp[nodo] * 2);
+    if (nodo->esp)
+      ins("ldnlp ", nodo->esp * 2);
     emite_linea("fpldnldb");
     return;
   }
   if (op == N_CONST) {
-    ins("ldc ", esp[nodo]);
+    ins("ldc ", nodo->esp);
     return;
   }
   if (op == N_LIT) {
@@ -682,7 +725,7 @@ gen_nodo(nodo)
     emite_texto("-");
     emite_etiq(temp = nueva_etiq);
     emite_texto("+");
-    emite_numero(esp[nodo]);
+    emite_numero(nodo->esp);
     emite_nueva_linea();
     emite_linea("ldpi");
     emite_etiq(temp);
@@ -691,34 +734,34 @@ gen_nodo(nodo)
     return;
   }
   if (op == N_LDLP) {
-    ins("ldlp ", esp[nodo] - pila);
+    ins("ldlp ", nodo->esp - pila);
     return;
   }
   if (op == N_LDL) {
-    ins("ldl ", esp[nodo] - pila);
+    ins("ldl ", nodo->esp - pila);
     return;
   }
   if (op == N_STL) {
-    ins("stl ", esp[nodo] - pila);
+    ins("stl ", nodo->esp - pila);
     return;
   }
   if ((op == N_INC) || (op == N_PINC)) {
-    if (regs[nodo_izq[nodo]] == 1) {
-      accesa_nodo(esp[nodo], nodo_izq[nodo], SI);
+    if (nodo->izq->regs == 1) {
+      accesa_nodo(nodo->esp, nodo->izq, SI);
     } else {
-      gen_nodo(nodo_izq[nodo]);
+      gen_nodo(nodo->izq);
       emite_linea("dup");
-      carga(esp[nodo]);
+      carga(nodo->esp);
     }
     if (op == N_PINC)
-      if(req_res)
+      if (req_res)
         emite_linea("dup");
-    ins("adc ", nodo_der[nodo]);
+    ins("adc ", nodo->der);
     if (op == N_INC)
-      if(req_res)
+      if (req_res)
         emite_linea("dup");
-    if (regs[nodo_izq[nodo]] == 1) {
-      accesa_nodo(esp[nodo], nodo_izq[nodo], NO);
+    if (nodo->izq->regs == 1) {
+      accesa_nodo(nodo->esp, nodo->izq, NO);
     } else {
       if (req_res) {
         emite_linea("pop");
@@ -728,14 +771,14 @@ gen_nodo(nodo)
           emite_linea("pop");
       } else
         emite_linea("rev");
-      almacena(esp[nodo]);
+      almacena(nodo->esp);
     }
     return;
   }
   if (op == N_ANDB) {
-    gen_nodo(nodo_izq[nodo]);
+    gen_nodo(nodo->izq);
     salta_si_falso(temp = nueva_etiq);
-    gen_nodo(nodo_der[nodo]);
+    gen_nodo(nodo->der);
     salta_si_falso(temp);
     emite_linea("ldc 1");
     emite_etiq(temp);
@@ -744,17 +787,17 @@ gen_nodo(nodo)
     return;
   }
   if (op == N_ORB) {
-    if(oper[nodo_izq[nodo]] == N_NOT)
-      gen_nodo(nodo_izq[nodo_izq[nodo]]);
+    if (nodo->izq->oper == N_NOT)
+      gen_nodo(nodo->izq->izq);
     else {
-      gen_nodo(nodo_izq[nodo]);
+      gen_nodo(nodo->izq);
       emite_linea("eqc 0");
     }
     salta_si_falso(temp = nueva_etiq);
-    if(oper[nodo_der[nodo]] == N_NOT)
-      gen_nodo(nodo_izq[nodo_der[nodo]]);
+    if (nodo->der->oper == N_NOT)
+      gen_nodo(nodo->der->izq);
     else {
-      gen_nodo(nodo_der[nodo]);
+      gen_nodo(nodo->der);
       emite_linea("eqc 0");
     }
     salta_si_falso(temp);
@@ -767,24 +810,25 @@ gen_nodo(nodo)
   }
   if (op == N_TRI) {
     temp = nueva_etiq;
-    if((oper[esp[nodo]] == N_ANDB) || (oper[esp[nodo]] == N_ORB)) {
+    nodo_temp = nodo->esp;
+    if ((nodo_temp->oper == N_ANDB) || (nodo_temp->oper == N_ORB)) {
       etiq_and = nueva_etiq;
       etiq_or = nueva_etiq;
-      corto_circuito(esp[nodo], etiq_and, etiq_or);
+      corto_circuito(nodo->esp, etiq_and, etiq_or);
       salta_si_falso(etiq_and);
       emite_etiq(etiq_or);
       dos_puntos();
       emite_nueva_linea();
     } else {
-      gen_nodo(esp[nodo]);
+      gen_nodo(nodo->esp);
       salta_si_falso(etiq_and = nueva_etiq);
     }
-    gen_nodo(nodo_izq[nodo]);
+    gen_nodo(nodo->izq);
     salto_no_int(temp);
     emite_etiq(etiq_and);
     dos_puntos();
     emite_nueva_linea();
-    gen_nodo(nodo_der[nodo]);
+    gen_nodo(nodo->der);
     emite_linea("dup");
     emite_etiq(temp);
     dos_puntos();
@@ -793,164 +837,164 @@ gen_nodo(nodo)
     return;
   }
   if (op == N_COMA) {
-    gen_nodo(nodo_izq[nodo]);
-    gen_nodo(nodo_der[nodo]);
+    gen_nodo(nodo->izq);
+    gen_nodo(nodo->der);
     return;
   }
   if (op == N_COPIA) {
     pila_extra = pila;
-    if ((regs[nodo_der[nodo]] >= regs[nodo_izq[nodo]]) &&
-        (regs[nodo_izq[nodo]] < 3)) {
-      estructura(nodo_der[nodo]);
-      gen_nodo(nodo_izq[nodo]);
-    } else if ((regs[nodo_izq[nodo]] > regs[nodo_der[nodo]]) &&
-               (regs[nodo_der[nodo]] < 3)) {
-      gen_nodo(nodo_izq[nodo]);
-      estructura(nodo_der[nodo]);
+    if ((nodo->der->regs >= nodo->izq->regs) &&
+        (nodo->izq->regs < 3)) {
+      estructura(nodo->der);
+      gen_nodo(nodo->izq);
+    } else if ((nodo->izq->regs > nodo->der->regs) &&
+               (nodo->der->regs < 3)) {
+      gen_nodo(nodo->izq);
+      estructura(nodo->der);
       emite_linea("rev");
     } else {
-      gen_nodo(nodo_izq[nodo]);
+      gen_nodo(nodo->izq);
       salva(0);
-      estructura(nodo_der[nodo]);
+      estructura(nodo->der);
       recupera(0);
     }
-    if(req_res)
+    if (req_res)
       emite_texto("ajw -1\ndup\nstl 0\n");
-    ins("ldc ", esp[nodo]);
+    ins("ldc ", nodo->esp);
     emite_linea("move");
-    if(req_res)
+    if (req_res)
       emite_texto("ldl 0\najw 1\n");
     pila = desp_pila(pila_extra);
     return;
   }
-  if (op == N_ENTPF && oper[nodo_izq[nodo]] == N_CPAL) {
-    gen_nodo(nodo_izq[nodo_izq[nodo]]);
+  if (op == N_ENTPF && nodo->izq->oper == N_CPAL) {
+    gen_nodo(nodo->izq->izq);
     emite_linea("fpi32tor64");
     return;
   }
-  if (op == N_CFLOAT && oper[nodo_izq[nodo]] == N_IXP) {
-    oper[nodo_izq[nodo]] = N_CFI;
-    gen_nodo(nodo_izq[nodo]);
-    oper[nodo_izq[nodo]] = N_IXP;
+  if (op == N_CFLOAT && nodo->izq->oper == N_IXP) {
+    nodo->izq->oper = N_CFI;
+    gen_nodo(nodo->izq);
+    nodo->izq->oper = N_IXP;
     return;
   }
-  if (op == N_CDOUBLE && oper[nodo_izq[nodo]] == N_IXF) {
-    oper[nodo_izq[nodo]] = N_CDI;
-    gen_nodo(nodo_izq[nodo]);
-    oper[nodo_izq[nodo]] = N_IXF;
+  if (op == N_CDOUBLE && nodo->izq->oper == N_IXF) {
+    nodo->izq->oper = N_CDI;
+    gen_nodo(nodo->izq);
+    nodo->izq->oper = N_IXF;
     return;
   }
   if (op == N_CPAL) {
-    if (oper[nodo_izq[nodo]] == N_LDLP) {
-      oper[nodo_izq[nodo]] = N_LDL;
-      gen_nodo(nodo_izq[nodo]);
-      oper[nodo_izq[nodo]] = N_LDLP;
+    if (nodo->izq->oper == N_LDLP) {
+      nodo->izq->oper = N_LDL;
+      gen_nodo(nodo->izq);
+      nodo->izq->oper = N_LDLP;
       return;
-    } else if (oper[nodo_izq[nodo]] == N_LDNLP) {
-      oper[nodo_izq[nodo]] = N_LDNL;
-      gen_nodo(nodo_izq[nodo]);
-      oper[nodo_izq[nodo]] = N_LDNLP;
+    } else if (nodo->izq->oper == N_LDNLP) {
+      nodo->izq->oper = N_LDNL;
+      gen_nodo(nodo->izq);
+      nodo->izq->oper = N_LDNLP;
       return;
     }
   }
   rev = NO;
-  if (nodo_der[nodo]) {
+  if (nodo->der) {
     if (op >= N_IGUALPF && op <= N_DIVPF) {
-      if ((regsf[nodo_izq[nodo]] >= regsf[nodo_der[nodo]]) &&
-          (regsf[nodo_der[nodo]] < 3)) {
-        gen_nodo(nodo_izq[nodo]);
-        if((op == N_SUMAPF || op == N_MULPF)
-        && (oper[nodo_der[nodo]] == N_CFLOAT
-         || oper[nodo_der[nodo]] == N_CDOUBLE)) {
-          gen_nodo(nodo_izq[nodo_der[nodo]]);
-          if(oper[nodo_der[nodo]] == N_CFLOAT) {
-            if(op == N_SUMAPF)
+      if ((nodo->izq->regsf >= nodo->der->regsf) &&
+          (nodo->der->regsf < 3)) {
+        gen_nodo(nodo->izq);
+        if ((op == N_SUMAPF || op == N_MULPF)
+        && (nodo->der->oper == N_CFLOAT
+         || nodo->der->oper == N_CDOUBLE)) {
+          gen_nodo(nodo->der->izq);
+          if (nodo->der->oper == N_CFLOAT) {
+            if (op == N_SUMAPF)
               emite_linea("fpldnladdsn");
             else
               emite_linea("fpldnlmulsn");
           } else {
-            if(op == N_SUMAPF)
+            if (op == N_SUMAPF)
               emite_linea("fpldnladddb");
             else
               emite_linea("fpldnlmuldb");
           }
           return;
         } else
-          gen_nodo(nodo_der[nodo]);
-      } else if ((regsf[nodo_der[nodo]] > regsf[nodo_izq[nodo]]) &&
-                 (regsf[nodo_izq[nodo]] < 3)) {
-        gen_nodo(nodo_der[nodo]);
-        if((op == N_SUMAPF || op == N_MULPF)
-        && (oper[nodo_izq[nodo]] == N_CFLOAT
-         || oper[nodo_izq[nodo]] == N_CDOUBLE)) {
-          gen_nodo(nodo_izq[nodo_izq[nodo]]);
-          if(oper[nodo_izq[nodo]] == N_CFLOAT) {
-            if(op == N_SUMAPF)
+          gen_nodo(nodo->der);
+      } else if ((nodo->der->regsf > nodo->izq->regsf) &&
+                 (nodo->izq->regsf < 3)) {
+        gen_nodo(nodo->der);
+        if ((op == N_SUMAPF || op == N_MULPF)
+        && (nodo->izq->oper == N_CFLOAT
+         || nodo->izq->oper == N_CDOUBLE)) {
+          gen_nodo(nodo->izq->izq);
+          if (nodo->izq->oper == N_CFLOAT) {
+            if (op == N_SUMAPF)
               emite_linea("fpldnladdsn");
             else
               emite_linea("fpldnlmulsn");
           } else {
-            if(op == N_SUMAPF)
+            if (op == N_SUMAPF)
               emite_linea("fpldnladddb");
             else
               emite_linea("fpldnlmuldb");
           }
           return;
         } else
-          gen_nodo(nodo_izq[nodo]);
+          gen_nodo(nodo->izq);
         rev = SI;
       } else {
-        gen_nodo(nodo_der[nodo]);
+        gen_nodo(nodo->der);
         salva(1);
-        gen_nodo(nodo_izq[nodo]);
-        if(op == N_SUMAPF) {
+        gen_nodo(nodo->izq);
+        if (op == N_SUMAPF) {
           recupera(2);
           return;
-        } else if(op == N_MULPF) {
+        } else if (op == N_MULPF) {
           recupera(3);
           return;
         }
         recupera(1);
       }
     } else {
-      if ((regs[nodo_izq[nodo]] >= regs[nodo_der[nodo]]) &&
-          (regs[nodo_der[nodo]] < 3)) {
-        gen_nodo(nodo_izq[nodo]);
-        gen_nodo(nodo_der[nodo]);
-      } else if ((regs[nodo_der[nodo]] > regs[nodo_izq[nodo]]) &&
-                 (regs[nodo_izq[nodo]] < 3)) {
-        gen_nodo(nodo_der[nodo]);
-        gen_nodo(nodo_izq[nodo]);
+      if ((nodo->izq->regs >= nodo->der->regs) &&
+          (nodo->der->regs < 3)) {
+        gen_nodo(nodo->izq);
+        gen_nodo(nodo->der);
+      } else if ((nodo->der->regs > nodo->izq->regs) &&
+                 (nodo->izq->regs < 3)) {
+        gen_nodo(nodo->der);
+        gen_nodo(nodo->izq);
         rev = SI;
       } else {
-        gen_nodo(nodo_der[nodo]);
+        gen_nodo(nodo->der);
         salva(0);
-        gen_nodo(nodo_izq[nodo]);
+        gen_nodo(nodo->izq);
         recupera(0);
       }
     }
   } else
-    gen_nodo(nodo_izq[nodo]);
+    gen_nodo(nodo->izq);
   if (op == N_CIGUAL) {
-    ins("eqc ", esp[nodo]);
+    ins("eqc ", nodo->esp);
     return;
   }
   if (op == N_CSUMA) {
-    if(esp[nodo])
-      ins("adc ", esp[nodo]);
+    if (nodo->esp)
+      ins("adc ", nodo->esp);
     return;
   }
   if (op == N_LDNLP) {
-    if(esp[nodo])
-      ins("ldnlp ", esp[nodo]);
+    if (nodo->esp)
+      ins("ldnlp ", nodo->esp);
     return;
   }
   if (op == N_LDNL) {
-    ins("ldnl ", esp[nodo]);
+    ins("ldnl ", nodo->esp);
     return;
   }
   if (op == N_STNL) {
-    ins("stnl ", esp[nodo]);
+    ins("stnl ", nodo->esp);
     return;
   }
   gen_oper(op, rev);
@@ -960,76 +1004,80 @@ gen_nodo(nodo)
 ** Genera una secuencia optima para && y ||
 */
 corto_circuito(nodo, etiq_and, etiq_or)
-  int nodo, etiq_and, etiq_or;
+  int etiq_and, etiq_or;
+  struct nodo *nodo;
 {
   int nueva, etiq, opt;
+
   nueva = NO;
-  if(oper[nodo] == N_ANDB) {
-    if(oper[nodo_izq[nodo]] == N_ANDB)
-      corto_circuito(nodo_izq[nodo], etiq_and, etiq_or);
-    else if(oper[nodo_izq[nodo]] == N_ORB) {
+  if (nodo->oper == N_ANDB) {
+    if (nodo->izq->oper == N_ANDB)
+      corto_circuito(nodo->izq, etiq_and, etiq_or);
+    else if (nodo->izq->oper == N_ORB) {
       etiq = nueva_etiq;
       nueva = SI;
-      corto_circuito(nodo_izq[nodo], etiq_and, etiq);
+      corto_circuito(nodo->izq, etiq_and, etiq);
     } else {
-      gen_nodo(nodo_izq[nodo]);
+      gen_nodo(nodo->izq);
     }
     salta_si_falso(etiq_and);
-    if(nueva) {
+    if (nueva) {
       emite_etiq(etiq);
       dos_puntos();
       emite_nueva_linea();
     }
-    if(oper[nodo_der[nodo]] == N_ANDB)
-      corto_circuito(nodo_der[nodo], etiq_and, etiq_or);
-    else if(oper[nodo_der[nodo]] == N_ORB)
-      corto_circuito(nodo_der[nodo], etiq_and, etiq_or);
+    if (nodo->der->oper == N_ANDB)
+      corto_circuito(nodo->der, etiq_and, etiq_or);
+    else if (nodo->der->oper == N_ORB)
+      corto_circuito(nodo->der, etiq_and, etiq_or);
     else
-      gen_nodo(nodo_der[nodo]);
-  } else if(oper[nodo] == N_ORB) {
+      gen_nodo(nodo->der);
+  } else if (nodo->oper == N_ORB) {
     opt = NO;
-    if(oper[nodo_izq[nodo]] == N_ANDB) {
+    if (nodo->izq->oper == N_ANDB) {
       etiq = nueva_etiq;
       nueva = SI;
-      corto_circuito(nodo_izq[nodo], etiq, etiq_or);
-    } else if(oper[nodo_izq[nodo]] == N_ORB)
-      corto_circuito(nodo_izq[nodo], etiq_and, etiq_or);
+      corto_circuito(nodo->izq, etiq, etiq_or);
+    } else if (nodo->izq->oper == N_ORB)
+      corto_circuito(nodo->izq, etiq_and, etiq_or);
     else
-      if(oper[nodo_izq[nodo]] == N_NOT) {
+      if (nodo->izq->oper == N_NOT) {
         opt = SI;
-        gen_nodo(nodo_izq[nodo_izq[nodo]]);
-      } else gen_nodo(nodo_izq[nodo]);
-    if(!opt)
+        gen_nodo(nodo->izq->izq);
+      } else
+        gen_nodo(nodo->izq);
+    if (!opt)
       emite_linea("eqc 0");
     salta_si_falso(etiq_or);
-    if(nueva) {
+    if (nueva) {
       emite_etiq(etiq);
       dos_puntos();
       emite_nueva_linea();
     }
-    if(oper[nodo_der[nodo]] == N_ANDB)
-      corto_circuito(nodo_der[nodo], etiq_and, etiq_or);
-    else if(oper[nodo_der[nodo]] == N_ORB)
-      corto_circuito(nodo_der[nodo], etiq_and, etiq_or);
+    if (nodo->der->oper == N_ANDB)
+      corto_circuito(nodo->der, etiq_and, etiq_or);
+    else if (nodo->der->oper == N_ORB)
+      corto_circuito(nodo->der, etiq_and, etiq_or);
     else
-      gen_nodo(nodo_der[nodo]);
+      gen_nodo(nodo->der);
   }
 }
 
 accesa_nodo(tipo, nodo, lectura)
-  int tipo, nodo, lectura;
+  int tipo, lectura;
+  struct nodo *nodo;
 {
-  if ((tipo == INT || tipo == UINT) && (oper[nodo] == N_LDLP)) {
-    oper[nodo] = lectura ? N_LDL : N_STL;
+  if ((tipo == INT || tipo == UINT) && (nodo->oper == N_LDLP)) {
+    nodo->oper = lectura ? N_LDL : N_STL;
     gen_nodo(nodo);
-    oper[nodo] = N_LDLP;
-  } else if ((tipo == INT || tipo == UINT) && (oper[nodo] == N_LDNLP)) {
-    oper[nodo] = lectura ? N_LDNL : N_STNL;
+    nodo->oper = N_LDLP;
+  } else if ((tipo == INT || tipo == UINT) && (nodo->oper == N_LDNLP)) {
+    nodo->oper = lectura ? N_LDNL : N_STNL;
     gen_nodo(nodo);
-    oper[nodo] = N_LDNLP;
+    nodo->oper = N_LDNLP;
   } else {
     gen_nodo(nodo);
-    if(lectura)
+    if (lectura)
       carga(tipo);
     else
       almacena(tipo);
@@ -1040,25 +1088,25 @@ accesa_nodo(tipo, nodo, lectura)
 ** Genera el codigo correcto para copias de estructuras.
 */
 estructura(nodo)
-  int nodo;
+  struct nodo *nodo;
 {
-  if(oper[nodo] == N_FUNC || oper[nodo] == N_FUNCI)
-    nodo_der[nodo] = 1;
+  if (nodo->oper == N_FUNC || nodo->oper == N_FUNCI)
+    nodo->der = 1;
   gen_nodo(nodo);
 }
 
 carga(tipo)
   int tipo;
 {
-  if(tipo == INT || tipo == UINT)
+  if (tipo == INT || tipo == UINT)
     emite_linea("ldnl 0");
-  else if(tipo == SHORT)
+  else if (tipo == SHORT)
     emite_linea("call LIB_CSHORT");
-  else if(tipo == USHORT)
+  else if (tipo == USHORT)
     emite_linea("call LIB_CUSHORT");
-  else if(tipo == DOUBLE)
+  else if (tipo == DOUBLE)
     emite_linea("fpldnldb");
-  else if(tipo == FLOAT)
+  else if (tipo == FLOAT)
     emite_linea("fpldnlsn");
   else
     emite_linea("lb");
@@ -1067,13 +1115,13 @@ carga(tipo)
 almacena(tipo)
   int tipo;
 {
-  if(tipo == INT || tipo == UINT)
+  if (tipo == INT || tipo == UINT)
     emite_linea("stnl 0");
-  else if(tipo == SHORT || tipo == USHORT)
+  else if (tipo == SHORT || tipo == USHORT)
     emite_linea("call LIB_GSHORT");
-  else if(tipo == DOUBLE)
+  else if (tipo == DOUBLE)
     emite_linea("fpstnldb");
-  else if(tipo == FLOAT)
+  else if (tipo == FLOAT)
     emite_linea("fpstnlsn");
   else
     emite_linea("sb");
@@ -1085,23 +1133,24 @@ almacena(tipo)
 copia_resultado(tam)
   int tam;
 {
-  int izq;
+  struct nodo *izq;
 
   izq = ultimo_nodo;
-  crea_nodo(N_LDL, 0, 0, 2);
+  crea_nodo(N_LDL, NULL, NULL, 2);
   crea_nodo(N_COPIA, ultimo_nodo, izq, tam);
 }
 
 asigna(nodo, posicion, tipo)
-  int nodo, posicion;
+  struct nodo *nodo;
+  int posicion;
   unsigned char *tipo;
 {
   es_control = NO;
   gen_codigo(nodo);
-  if(*tipo == FLOAT) {
+  if (*tipo == FLOAT) {
     ins("ldlp ", posicion - pila);
     emite_linea("fpstnlsn");
-  } else if(*tipo == DOUBLE) {
+  } else if (*tipo == DOUBLE) {
     ins("ldlp ", posicion - pila);
     emite_linea("fpstnldb");
   } else
@@ -1196,7 +1245,7 @@ epilogo()
       def_byte();
       for(byte = 0; byte < TAM_DOUBLE; ++byte) {
         emite_numero(constantes[pos].byte[byte]);
-        if(byte != TAM_DOUBLE - 1)
+        if (byte != TAM_DOUBLE - 1)
           emite_car(',');
       }
       emite_nueva_linea();
@@ -1240,7 +1289,7 @@ emite_nombre(nombre)
 salva(flotante)
   int flotante;
 {
-  if(flotante) {
+  if (flotante) {
     emite_texto("ajw -2\nldlp 0\nfpstnldb\n");
     pila -= 2;
   } else {
@@ -1255,13 +1304,13 @@ salva(flotante)
 recupera(flotante)
   int flotante;
 {
-  if(flotante) {
+  if (flotante) {
     emite_linea("ldlp 0");
-    if(flotante == 1)
+    if (flotante == 1)
       emite_linea("fpldnldb");
-    else if(flotante == 2)
+    else if (flotante == 2)
       emite_linea("fpldnladddb");
-    else if(flotante == 3)
+    else if (flotante == 3)
       emite_linea("fpldnlmuldb");
     emite_linea("ajw 2");
     pila += 2;
@@ -1277,7 +1326,7 @@ recupera(flotante)
 copia_reg(flotante)
   int flotante;
 {
-  if(flotante)
+  if (flotante)
     emite_linea("fpdup");
   else
     emite_linea("dup");

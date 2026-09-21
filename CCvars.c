@@ -56,12 +56,13 @@
 ** Revisión: 29 de noviembre de 1995. Se añaden las macros car_act() y
 **                                    nueva_etiq(), también N_CONVFD.
 ** Revisión: 30 de noviembre de 1995. Se añaden las macros N_CDI y N_CFI para
-**                                    optimación interna.
+**                                    optimización interna.
 ** Revisión: 1o. de diciembre de 1995. Se añaden las macros N_ENTF y N_CONVDF.
 ** Revisión: 1o. de enero de 1996. Mejoras mínimas.
 ** Revisión: 20 de junio de 1996. Se añade la macro NIVEL.
 ** Revisión: 6 de mayo de 1998. Se convierten los char a unsigned char,
 **                              para maxima portabilidad.
+** Revisión: 7 de mayo de 1998. Se crean las estructuras nodo y inic.
 */
  
 #define PROGRAMA     "Compilador de C para G10  (c) Oscar Toledo G.1996"
@@ -285,24 +286,30 @@ unsigned char args[2],  /* Indica si las dos palabras están ocupadas */
      tipos[TAM_TIPOS],  /* Tabla de tipos */
      tabla[TAM_TABLA];  /* Tabla de nombres */
 
-#define MAX_INIC   48   /* Máximo número de inicializaciones de variables */
-                        /* automáticas locales * 3. */
+#define MAX_INIC   16   /* Máximo número de inicializaciones de variables */
+                        /* automáticas locales. */
 
-int nodo_inic[MAX_INIC]; /* Nodo correspondiente a la inicialización */
+struct inic {
+  struct nodo *raiz;
+  int donde;
+  unsigned char *tipo;
+} nodo_inic[MAX_INIC]; /* Nodo correspondiente a la inicialización */
+
 int vars_inicializadas;  /* Variables inicializadas */
 
-#define TAM_ARBOL 128    /* Tamaño máximo de una expresión */
+struct nodo {
+  struct nodo *izq;
+  struct nodo *der;
+  int oper;
+  int esp;
+  int regs;
+  int regsf;
+};
 
-int nodo_izq[TAM_ARBOL]; /* Descendiente izquierdo del nodo */
-int nodo_der[TAM_ARBOL]; /* Descendiente derecho del nodo */
-int oper[TAM_ARBOL];     /* Operador correspondiente al nodo */
-int esp[TAM_ARBOL];      /* Valor correspondiente al nodo */
-int regs[TAM_ARBOL];     /* Registros requeridos para evaluar el nodo */
-int regsf[TAM_ARBOL];    /* Registros requeridos para evaluar el nodo */
-int ultimo_nodo;         /* Ultimo nodo definido */
-int raiz_arbol;          /* Raíz del arbol actual */
-int es_control;          /* Indica si la expresión es para una sentencia */
-                         /* de control */
+struct nodo *ultimo_nodo;  /* Ultimo nodo definido */
+struct nodo *raiz_arbol;   /* Raíz del arbol actual */
+int es_control;            /* Indica si la expresión es para una sentencia */
+                           /* de control */
 int etiq_and, etiq_or;   /* Etiquetas de salida para && y || */
 int multi;               /* Multiplicación para suma y resta con apuntadores */
 

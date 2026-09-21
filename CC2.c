@@ -12,9 +12,9 @@
 ** Revisión: 22 de noviembre de 1995. Incluyo el camino a la unidad c:
 */
 
-#include "CCvars.c"    /* Variables y definiciones.           */
-#include "CCinter.c"   /* Interfaz con el usuario.            */
-#include "CCanasin.c"  /* Análisis sintáctico de alto nivel.  */
-#include "CCvarios.c"  /* Funciones de soporte.               */
-#include "CCexpr.c"    /* Análisis sintáctico de expresiones. */
-#include "CCgencod.c"  /* Generador de codigo.                */
+#include "c:/gcc/trabajo0/CCvars.c"    /* Variables y definiciones.           */
+#include "c:/gcc/trabajo0/CCinter.c"   /* Interfaz con el usuario.            */
+#include "c:/gcc/trabajo0/CCanasin.c"  /* Análisis sintáctico de alto nivel.  */
+#include "c:/gcc/trabajo0/CCvarios.c"  /* Funciones de soporte.               */
+#include "c:/gcc/trabajo0/CCexpr.c"    /* Análisis sintáctico de expresiones. */
+#include "c:/gcc/trabajo0/CCgencod.c"  /* Generador de codigo.                */

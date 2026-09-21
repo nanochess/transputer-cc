@@ -47,7 +47,7 @@
 **                                    flotante.
 ** Revisión: 26 de noviembre de 1995. Corrección de un defecto en el manejo
 **                                    de estructuras.
-** Revisión: 30 de noviembre de 1995. Generación de nodos para optimación
+** Revisión: 30 de noviembre de 1995. Generación de nodos para optimización
 **                                    de operaciones con float.
 ** Revisión: 1o. de diciembre de 1995. Corrección de varios defectos.
 ** Revisión: 28 de diciembre de 1995. Corrección de un defecto en el manejo
@@ -71,6 +71,8 @@
 **                                codigo para el operador trinario.
 ** Revisión: 15 de abril de 1996. Corrección de un defecto que no permitia el
 **                                acceso a estructuras en matrices.
+** Revisión: 7 de mayo de 1998. Ahora los árboles de expresiones se crean
+**                              dinámicamente.
 */
 
 /*
@@ -94,12 +96,13 @@ evalua_arbol(control)
 */
 expresion()
 {
-  int origen;
+  struct nodo *origen;
   unsigned char *tipo;
 
   origen = ultimo_nodo;
   tipo = almacena_expresion(SI);
   evalua_arbol(NO);
+  libera_arbol(ultimo_nodo);
   ultimo_nodo = origen;
   return tipo;
 }
@@ -114,12 +117,14 @@ expr_constante()
 
   origen = ultimo_nodo;
   checa_entero(almacena_expresion(SI));
-  if (oper[ultimo_nodo] != N_CONST) {
+  if (ultimo_nodo->oper != N_CONST) {
+    libera_arbol(ultimo_nodo);
     ultimo_nodo = origen;
     error("No es una expresión constante");
     return 1;
   } else {
-    valor = esp[ultimo_nodo];
+    valor = ultimo_nodo->esp;
+    libera_arbol(ultimo_nodo);
     ultimo_nodo = origen;
     return valor;
   }
@@ -146,7 +151,8 @@ almacena_expresion(operador_coma)
 nivel0(info)
   int info[];
 {
-  int k, izq;
+  int k;
+  struct nodo *izq;
 
   k = nivel1(info);
   while (match(",")) {
@@ -162,8 +168,8 @@ nivel0(info)
 nivel1(info)
   int info[];
 {
-  int k, info2[1];
-  int der, izq, op;
+  int k, info2[1], op;
+  struct nodo *der, *izq;
   unsigned char *tipo, *tipo2;
 
   k = nivel2(info);
@@ -193,22 +199,22 @@ nivel1(info)
   der = ultimo_nodo;
   tipo = info[0];
   if (k == 0)
-    if(*tipo != STRUCT)
+    if (*tipo != STRUCT)
       req_valorl();
   if (nivel1(info2)) {
-    if(*tipo == STRUCT)
+    if (*tipo == STRUCT)
       req_valorl();
     carga_valor(info2);
     izq = ultimo_nodo;
-  } else if(*tipo == STRUCT) {
+  } else if (*tipo == STRUCT) {
     tipo2 = info2[0];
-    if(*tipo2 != STRUCT)
+    if (*tipo2 != STRUCT)
       error("Se requiere una estructura o unión");
     else {
-      if(lee_entero(tipo + 1) != lee_entero(tipo2 + 1))
+      if (lee_entero(tipo + 1) != lee_entero(tipo2 + 1))
         error("Estructuras incompatibles");
     }
-    if(op != N_ASIGNA)
+    if (op != N_ASIGNA)
       error("Asignación incompatible");
     crea_nodo(N_COPIA, der, ultimo_nodo, tam_tipo(tipo));
     return 0;
@@ -216,33 +222,33 @@ nivel1(info)
     izq = ultimo_nodo;
   tipo2 = info2[0];
   convierte_tipo(&izq, tipo2, tipo);
-  if((*tipo == DOUBLE || *tipo == FLOAT)
+  if ((*tipo == DOUBLE || *tipo == FLOAT)
   && (op == N_AOR || op == N_AXOR
    || op == N_AAND || op == N_ACI
    || op == N_ACD || op == N_AMOD))
     error("No se puede hacer esta operación con reales");
-  if((op == N_ASUMA) || (op == N_ARESTA)) {
-    if(k = dobla(tipo, izq)) {
-      if(k == 2) {
-        if(multi == 4) {
-          if(op == N_ARESTA) {
-            crea_nodo(N_NEG, izq, 0, 0);
+  if ((op == N_ASUMA) || (op == N_ARESTA)) {
+    if (k = dobla(tipo, izq)) {
+      if (k == 2) {
+        if (multi == 4) {
+          if (op == N_ARESTA) {
+            crea_nodo(N_NEG, izq, NULL, 0);
             izq = ultimo_nodo;
           }
           op = N_AIXP;
-        } else if(multi != 1) {
-          crea_nodo(N_CONST, 0, 0, multi);
+        } else if (multi != 1) {
+          crea_nodo(N_CONST, NULL, NULL, multi);
           crea_nodo(N_MUL, izq, ultimo_nodo, 0);
           izq = ultimo_nodo;
         }
       }
     }
   }
-  if((op == N_ARESTA) && (oper[izq] == N_CONST)) {
+  if ((op == N_ARESTA) && (izq->oper == N_CONST)) {
     op = N_ASUMA;
-    esp[izq] = -esp[izq];
+    izq->esp = -izq->esp;
   }
-  if(*tipo == APUNTADOR)
+  if (*tipo == APUNTADOR)
     tipo = t_int;
   crea_nodo(op, izq, der, *tipo);
   return 0;
@@ -252,7 +258,7 @@ nivel2(info)
   int info[];
 {
   int k, info2[1], info3[1];
-  int ext, izq, der;
+  struct nodo *ext, *izq, *der;
 
   k = nivel3(info);
   espacios();
@@ -269,10 +275,12 @@ nivel2(info)
   if (nivel2(info3))
     carga_valor(info3);
   der = ultimo_nodo;
-  if((oper[ext] == N_CONST) &&
-     (oper[izq] == N_CONST) &&
-     (oper[der] == N_CONST)) {
-    if(esp[ext]) esp[ultimo_nodo] = esp[izq];
+  if ((ext->oper == N_CONST) &&
+     (izq->oper == N_CONST) &&
+     (der->oper == N_CONST)) {
+    if (ext->esp) ultimo_nodo->esp = izq->esp;
+    libera_arbol(ext);
+    libera_arbol(izq);
   } else {
     haz_compatible(&izq, info2, &der, info3);
     crea_nodo(N_TRI, izq, der, ext);
@@ -285,7 +293,7 @@ nivel3(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel4(info);
   espacios();
@@ -310,7 +318,7 @@ nivel4(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel5(info);
   espacios();
@@ -335,7 +343,7 @@ nivel5(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel6(info);
   if (encuentra("|") == 0) return k;
@@ -348,9 +356,10 @@ nivel5(info)
     if (nivel6(info2))
       carga_valor(info2);
     checa_entero(info2[0]);
-    if(oper[izq] == N_CONST && oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] |= esp[izq];
-    else
+    if (izq->oper == N_CONST && ultimo_nodo->oper == N_CONST) {
+      ultimo_nodo->esp |= izq->esp;
+      libera_arbol(izq);
+    } else
       crea_nodo(N_OR, izq, ultimo_nodo, 0);
   }
   return 0;
@@ -360,7 +369,7 @@ nivel6(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel7(info);
   if (encuentra("^") == 0) return k;
@@ -373,9 +382,10 @@ nivel6(info)
     if (nivel7(info2))
       carga_valor(info2);
     checa_entero(info2[0]);
-    if(oper[izq] == N_CONST && oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] ^= esp[izq];
-    else
+    if (izq->oper == N_CONST && ultimo_nodo->oper == N_CONST) {
+      ultimo_nodo->esp ^= izq->esp;
+      libera_arbol(izq);
+    } else
       crea_nodo(N_XOR, izq, ultimo_nodo, 0);
   }
   return 0;
@@ -385,7 +395,7 @@ nivel7(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel8(info);
   if (encuentra("&") == 0) return k;
@@ -398,9 +408,10 @@ nivel7(info)
     if (nivel8(info2))
       carga_valor(info2);
     checa_entero(info2[0]);
-    if(oper[izq] == N_CONST && oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] &= esp[izq];
-    else
+    if (izq->oper == N_CONST && ultimo_nodo->oper == N_CONST) {
+      ultimo_nodo->esp &= izq->esp;
+      libera_arbol(izq);
+    } else
       crea_nodo(N_AND, izq, ultimo_nodo, 0);
   }
   return 0;
@@ -410,7 +421,7 @@ nivel8(info)
   int info[];
 {
   int k, info2[1];
-  int izq, der;
+  struct nodo *izq, *der;
 
   k = nivel9(info);
   if ((encuentra("==") == 0) &&
@@ -425,37 +436,44 @@ nivel8(info)
       if (nivel9(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2))
+      if (haz_compatible(&izq, info, &der, info2))
         crea_nodo(N_IGUALPF, izq, der, 0);
-      else if(oper[der] == N_CONST) {
-        if(oper[izq] == N_CONST)
-          crea_nodo(N_CONST, 0, 0, esp[izq] == esp[der]);
-        else
-          crea_nodo(N_CIGUAL, izq, 0, esp[der]);
-      } else if(oper[izq] == N_CONST)
-        crea_nodo(N_CIGUAL, der, 0, esp[izq]);
-      else crea_nodo(N_IGUAL, izq, der, 0);
+      else if (der->oper == N_CONST) {
+        if (izq->oper == N_CONST) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp == der->esp);
+          libera_arbol(izq);
+        } else
+          crea_nodo(N_CIGUAL, izq, NULL, der->esp);
+        libera_arbol(der);
+      } else if (izq->oper == N_CONST) {
+        crea_nodo(N_CIGUAL, der, 0, izq->esp);
+        libera_arbol(izq);
+      } else
+        crea_nodo(N_IGUAL, izq, der, 0);
     } else if (encuentra("!=")) {
       pos_linea += 2;
       if (nivel9(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2)) {
+      if (haz_compatible(&izq, info, &der, info2)) {
         crea_nodo(N_IGUALPF, izq, der, 0);
-        crea_nodo(N_NOT, ultimo_nodo, 0, 0);
-      } else if(oper[der] == N_CONST) {
-        if(oper[izq] == N_CONST)
-          crea_nodo(N_CONST, 0, 0, esp[izq] != esp[der]);
-        else {
-          crea_nodo(N_CIGUAL, izq, 0, esp[der]);
-          crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+        crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
+      } else if (der->oper == N_CONST) {
+        if (izq->oper == N_CONST) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp != der->esp);
+          libera_arbol(izq);
+        } else {
+          crea_nodo(N_CIGUAL, izq, NULL, der->esp);
+          crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
         }
-      } else if(oper[izq] == N_CONST) {
-        crea_nodo(N_CIGUAL, der, 0, esp[izq]);
-        crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+        libera_arbol(der);
+      } else if (izq->oper == N_CONST) {
+        crea_nodo(N_CIGUAL, der, NULL, izq->esp);
+        crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
+        libera_arbol(izq);
       } else {
         crea_nodo(N_IGUAL, izq, der, 0);
-        crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+        crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
       }
     } else
       return 0;
@@ -498,7 +516,7 @@ nivel9eval(k, info)
   int k, info[];
 {
   int info2[1];
-  int izq, der;
+  struct nodo *izq, *der;
   unsigned char *tipo;
 
   izq = ultimo_nodo;
@@ -506,12 +524,12 @@ nivel9eval(k, info)
     carga_valor(info2);
   der = ultimo_nodo;
   if (haz_compatible(&izq, info, &der, info2)) {
-    if(k == 4 || k == 1)
+    if (k == 4 || k == 1)
       crea_nodo(N_MAYORPF, izq, der, 0);
     else
       crea_nodo(N_MAYORPF, der, izq, 0);
-    if(k == 1 || k == 2)
-      crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+    if (k == 1 || k == 2)
+      crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
     info[0] = t_int;
     return;
   }
@@ -527,29 +545,35 @@ nivel9eval(k, info)
     info[0] = t_int;
     return;
   }
-  if(k == 4) {
-    if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-      crea_nodo(N_CONST, 0, 0, esp[izq] > esp[der]);
-    else
+  if (k == 4) {
+    if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+      crea_nodo(N_CONST, NULL, NULL, izq->esp > der->esp);
+      libera_arbol(izq);
+      libera_arbol(der);
+    } else
       crea_nodo(N_MAYOR, izq, der, 0);
-  }
-  else if(k == 3) {
-    if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-      crea_nodo(N_CONST, 0, 0, esp[izq] < esp[der]);
-    else
+  } else if (k == 3) {
+    if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+      crea_nodo(N_CONST, NULL, NULL, izq->esp < der->esp);
+      libera_arbol(izq);
+      libera_arbol(der);
+    } else
       crea_nodo(N_MAYOR, der, izq, 0);
-  }
-  else if(k == 1) {
-    if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-      crea_nodo(N_CONST, 0, 0, esp[izq] <= esp[der]);
-    else {
+  } else if (k == 1) {
+    if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+      crea_nodo(N_CONST, NULL, NULL, izq->esp <= der->esp);
+      libera_arbol(izq);
+      libera_arbol(der);
+    } else {
       crea_nodo(N_MAYOR, izq, der, 0);
       crea_nodo(N_NOT, ultimo_nodo, 0);
     }
   } else {
-    if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-      crea_nodo(N_CONST, 0, 0, esp[izq] >= esp[der]);
-    else {
+    if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+      crea_nodo(N_CONST, NULL, NULL, izq->esp >= der->esp);
+      libera_arbol(izq);
+      libera_arbol(der);
+    } else {
       crea_nodo(N_MAYOR, der, izq, 0);
       crea_nodo(N_NOT, ultimo_nodo, 0);
     }
@@ -560,14 +584,16 @@ nivel9eval(k, info)
 nivel9op(izq, k)
   int izq, k;
 {
-  if(k == 4) crea_nodo(N_SMAYOR, izq, ultimo_nodo, 0);
-  else if(k == 3) crea_nodo(N_SMAYOR, ultimo_nodo, izq, 0);
-  else if(k == 1) {
+  if (k == 4)
     crea_nodo(N_SMAYOR, izq, ultimo_nodo, 0);
-    crea_nodo(N_NOT, ultimo_nodo, 0);
+  else if (k == 3)
+    crea_nodo(N_SMAYOR, ultimo_nodo, izq, 0);
+  else if (k == 1) {
+    crea_nodo(N_SMAYOR, izq, ultimo_nodo, 0);
+    crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
   } else {
     crea_nodo(N_SMAYOR, ultimo_nodo, izq, 0);
-    crea_nodo(N_NOT, ultimo_nodo, 0);
+    crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
   }
 }
 
@@ -575,7 +601,7 @@ nivel10(info)
   int info[];
 {
   int k, info2[1];
-  int izq;
+  struct nodo *izq;
 
   k = nivel11(info);
   if ((encuentra(">>") == 0) &&
@@ -591,9 +617,10 @@ nivel10(info)
       if (nivel11(info2))
         carga_valor(info2);
       checa_entero(info2[0]);
-      if((oper[izq] == N_CONST) && (oper[ultimo_nodo] == N_CONST))
-        crea_nodo(N_CONST, 0, 0, esp[izq] >> esp[ultimo_nodo]);
-      else
+      if ((izq->oper == N_CONST) && (ultimo_nodo->oper == N_CONST)) {
+        ultimo_nodo->esp = izq->esp >> ultimo_nodo->esp;
+        libera_arbol(izq);
+      } else
         crea_nodo(N_CD, izq, ultimo_nodo, 0);
     } else if (encuentra("<<")) {
       pos_linea += 2;
@@ -601,9 +628,10 @@ nivel10(info)
       if (nivel11(info2))
         carga_valor(info2);
       checa_entero(info2[0]);
-      if((oper[izq] == N_CONST) && (oper[ultimo_nodo] == N_CONST))
-        crea_nodo(N_CONST, 0, 0, esp[izq] << esp[ultimo_nodo]);
-      else
+      if ((izq->oper == N_CONST) && (ultimo_nodo->oper == N_CONST)) {
+        ultimo_nodo->esp = izq->esp << ultimo_nodo->esp;
+        libera_arbol(izq);
+      } else
         crea_nodo(N_CI, izq, ultimo_nodo, 0);
     } else
       return 0;
@@ -613,8 +641,8 @@ nivel10(info)
 nivel11(info)
   int info[];
 {
-  int k, info2[1];
-  int izq, der, tam;
+  int k, info2[1], tam;
+  struct nodo *izq, *der;
   unsigned char *tipo;
 
   k = nivel12(info);
@@ -630,38 +658,42 @@ nivel11(info)
       if (nivel12(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2)) {
+      if (haz_compatible(&izq, info, &der, info2)) {
         crea_nodo(N_SUMAPF, izq, der, 0);
       } else {
-        if(k = dobla(info[0], der)) {
-          if(k == 2 && multi == 4) {
+        if (k = dobla(info[0], der)) {
+          if (k == 2 && multi == 4) {
             crea_nodo(N_IXP, der, izq, 0);
             continue;
-          } else if(k == 2 && multi != 1) {
-            crea_nodo(N_CONST, 0, 0, multi);
+          } else if (k == 2 && multi != 1) {
+            crea_nodo(N_CONST, NULL, NULL, multi);
             crea_nodo(N_MUL, der, ultimo_nodo, 0);
             der = ultimo_nodo;
           }
         } else {
           info[0] = info2[0];
-          if(k = dobla(info[0], izq)) {
-            if(k == 2 && multi == 4) {
+          if (k = dobla(info[0], izq)) {
+            if (k == 2 && multi == 4) {
               crea_nodo(N_IXP, izq, der, 0);
               continue;
-            } else if(k == 2 && multi != 1) {
-              crea_nodo(N_CONST, 0, 0, multi);
+            } else if (k == 2 && multi != 1) {
+              crea_nodo(N_CONST, NULL, NULL, multi);
               crea_nodo(N_MUL, izq, ultimo_nodo, 0);
               izq = ultimo_nodo;
             }
           }
         }
-        if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-          crea_nodo(N_CONST, 0, 0, esp[izq] + esp[der]);
-        else if(oper[der] == N_CONST)
-          crea_nodo(N_CSUMA, izq, 0, esp[der]);
-        else if(oper[izq] == N_CONST)
-          crea_nodo(N_CSUMA, der, 0, esp[izq]);
-        else
+        if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp + der->esp);
+          libera_arbol(der);
+          libera_arbol(izq);
+        } else if (der->oper == N_CONST) {
+          crea_nodo(N_CSUMA, izq, NULL, der->esp);
+          libera_arbol(der);
+        } else if (izq->oper == N_CONST) {
+          crea_nodo(N_CSUMA, der, NULL, izq->esp);
+          libera_arbol(izq);
+        } else
           crea_nodo(N_SUMA, izq, der, 0);
       }
     } else if (encuentra("-")) {
@@ -669,45 +701,48 @@ nivel11(info)
       if (nivel12(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2)) {
+      if (haz_compatible(&izq, info, &der, info2)) {
         crea_nodo(N_RESTAPF, izq, der, 0);
       } else {
         tipo = info[0];
-        if(*tipo == APUNTADOR || *tipo == MATRIZ) {
+        if (*tipo == APUNTADOR || *tipo == MATRIZ) {
           tipo = info2[0];
-          if(*tipo == APUNTADOR || *tipo == MATRIZ) {
+          if (*tipo == APUNTADOR || *tipo == MATRIZ) {
             crea_nodo(N_RESTA, izq, der, 0);
-            if(*tipo == APUNTADOR)
+            if (*tipo == APUNTADOR)
               tam = tam_tipo(tipo + 1);
             else
               tam = tam_tipo(tipo + 5);
-            if(tam == 4)
-              crea_nodo(N_CUENTA, ultimo_nodo, 0, 0);
-            else if(tam != 1) {
+            if (tam == 4)
+              crea_nodo(N_CUENTA, ultimo_nodo, NULL, 0);
+            else if (tam != 1) {
               izq = ultimo_nodo;
-              crea_nodo(N_CONST, 0, 0, tam);
+              crea_nodo(N_CONST, NULL, NULL, tam);
               crea_nodo(N_DIV, izq, ultimo_nodo, 0);
             }
             info[0] = t_int;
             continue;
           }
         }
-        if(k = dobla(info[0], der)) {
-          if(k == 2 && multi == 4) {
-            crea_nodo(N_NEG, der, 0, 0);
+        if (k = dobla(info[0], der)) {
+          if (k == 2 && multi == 4) {
+            crea_nodo(N_NEG, der, NULL, 0);
             crea_nodo(N_IXP, ultimo_nodo, izq, 0);
             continue;
-          } else if(k == 2 && multi != 1) {
-            crea_nodo(N_CONST, 0, 0, multi);
+          } else if (k == 2 && multi != 1) {
+            crea_nodo(N_CONST, NULL, NULL, multi);
             crea_nodo(N_MUL, der, ultimo_nodo, 0);
             der = ultimo_nodo;
           }
         }
-        if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-          crea_nodo(N_CONST, 0, 0, esp[izq] - esp[der]);
-        else if(oper[der] == N_CONST)
-          crea_nodo(N_CSUMA, izq, 0, -esp[der]);
-        else
+        if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp - der->esp);
+          libera_arbol(izq);
+          libera_arbol(der);
+        } else if (der->oper == N_CONST) {
+          crea_nodo(N_CSUMA, izq, NULL, -der->esp);
+          libera_arbol(der);
+        } else
           crea_nodo(N_RESTA, izq, der, 0);
       }
     } else
@@ -719,7 +754,7 @@ nivel12(info)
   int info[];
 {
   int k, info2[1];
-  int izq, der;
+  struct nodo *izq, *der;
 
   k = nivel13(info);
   if ((encuentra("*") == 0) &&
@@ -735,14 +770,16 @@ nivel12(info)
       if (nivel13(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2)) {
+      if (haz_compatible(&izq, info, &der, info2)) {
         crea_nodo(N_MULPF, izq, der, 0);
       } else {
         checa_entero(info[0]);
         checa_entero(info2[0]);
-        if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-          crea_nodo(N_CONST, 0, 0, esp[izq] * esp[der]);
-        else
+        if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp * der->esp);
+          libera_arbol(izq);
+          libera_arbol(der);
+        } else
           crea_nodo(N_MUL, izq, der, 0);
       }
     } else if (encuentra("/")) {
@@ -750,14 +787,16 @@ nivel12(info)
       if (nivel13(info2))
         carga_valor(info2);
       der = ultimo_nodo;
-      if(haz_compatible(&izq, info, &der, info2)) {
+      if (haz_compatible(&izq, info, &der, info2)) {
         crea_nodo(N_DIVPF, izq, der, 0);
       } else {
         checa_entero(info[0]);
         checa_entero(info2[0]);
-        if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-          crea_nodo(N_CONST, 0, 0, esp[izq] / esp[der]);
-        else
+        if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+          crea_nodo(N_CONST, NULL, NULL, izq->esp / der->esp);
+          libera_arbol(izq);
+          libera_arbol(der);
+        } else
           crea_nodo(N_DIV, izq, der, 0);
       }
     } else if (encuentra("%")) {
@@ -767,9 +806,11 @@ nivel12(info)
         carga_valor(info2);
       checa_entero(info2[0]);
       der = ultimo_nodo;
-      if((oper[izq] == N_CONST) && (oper[der] == N_CONST))
-        crea_nodo(N_CONST, 0, 0, esp[izq] % esp[der]);
-      else
+      if ((izq->oper == N_CONST) && (der->oper == N_CONST)) {
+        crea_nodo(N_CONST, NULL, NULL, izq->esp % der->esp);
+        libera_arbol(izq);
+        libera_arbol(der);
+      } else
         crea_nodo(N_MOD, izq, der, 0);
     } else
       return 0;
@@ -781,6 +822,7 @@ nivel13(info)
 {
   int k, p;
   unsigned char *tipo, *tipo2;
+  struct nodo *n;
 
   if (match("++")) {
     if (nivel13(info) == 0)
@@ -795,42 +837,42 @@ nivel13(info)
     nivel13dec(info);
     return 0;
   } else if (match("-")) {
-    if(nivel13(info))
+    if (nivel13(info))
       carga_valor(info);
     checa_numerico(info[0]);
     tipo = info[0];
-    if(oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] = -esp[ultimo_nodo];
-    else if(*tipo == DOUBLE || *tipo == FLOAT) {
-      k = ultimo_nodo;
+    if (ultimo_nodo->oper == N_CONST)
+      ultimo_nodo->esp = -ultimo_nodo->esp;
+    else if (*tipo == DOUBLE || *tipo == FLOAT) {
+      n = ultimo_nodo;
       if (*tipo == DOUBLE)
-        crea_nodo(N_CEROPF, 0, 0, 0);
+        crea_nodo(N_CEROPF, NULL, NULL, 0);
       else
-        crea_nodo(N_CEROF, 0, 0, 0);
-      crea_nodo(N_RESTAPF, ultimo_nodo, k, 0);
+        crea_nodo(N_CEROF, NULL, NULL, 0);
+      crea_nodo(N_RESTAPF, ultimo_nodo, n, 0);
     } else
-      crea_nodo(N_NEG, ultimo_nodo, 0, 0);
+      crea_nodo(N_NEG, ultimo_nodo, NULL, 0);
     return 0;
   } else if (match("~")) {
-    if(nivel13(info))
+    if (nivel13(info))
       carga_valor(info);
     checa_entero(info[0]);
-    if(oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] = ~esp[ultimo_nodo];
+    if (ultimo_nodo->oper == N_CONST)
+      ultimo_nodo->esp = ~ultimo_nodo->esp;
     else
-      crea_nodo(N_COM, ultimo_nodo, 0, 0);
+      crea_nodo(N_COM, ultimo_nodo, NULL, 0);
     return 0;
   } else if (match("!")) {
-    if(nivel13(info))
+    if (nivel13(info))
       carga_valor(info);
     checa_numerico(info[0]);
     tipo = info[0];
-    if(oper[ultimo_nodo] == N_CONST)
-      esp[ultimo_nodo] = !esp[ultimo_nodo];
-    else if(*tipo == DOUBLE || *tipo == FLOAT)
+    if (ultimo_nodo->oper == N_CONST)
+      ultimo_nodo->esp = !ultimo_nodo->esp;
+    else if (*tipo == DOUBLE || *tipo == FLOAT)
       compara_cero(tipo);
     else
-      crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+      crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
     info[0] = t_int;
     return 0;
   } else if (match("*")) {
@@ -838,26 +880,26 @@ nivel13(info)
   } else if (match("&")) {
     return nivel13dir(info);
   } else if (amatch("sizeof", 6)) {
-    if(match("(")) {
-      if(p_tipo_1(NO)) {
+    if (match("(")) {
+      if (p_tipo_1(NO)) {
         p_tipo_2(NULL);
         pide(")");
-        crea_nodo(N_CONST, 0, 0, tam_tipo(tipo_proc));
+        crea_nodo(N_CONST, NULL, NULL, tam_tipo(tipo_proc));
         info[0] = t_int;
         return 0;
       } else
         k = primaria(info, SI);
     } else
       k = nivel13(info);
-    crea_nodo(N_CONST, 0, 0, tam_tipo(info[0]));
+    crea_nodo(N_CONST, NULL, NULL, tam_tipo(info[0]));
     info[0] = t_int;
     return 0;
   } else if (match("(")) {
-    if(p_tipo_1(NO)) {
+    if (p_tipo_1(NO)) {
       p_tipo_2(NULL);
       pide(")");
       tipo = tipo_proc;
-      if(nivel13(info))
+      if (nivel13(info))
         carga_valor(info);
       tipo2 = info[0];
       info[0] = tipo;
@@ -893,11 +935,14 @@ nivel13ap(info)
   if (k)
     carga_valor(info);
   ap = info[0];
-  if(*ap == APUNTADOR) ap++;
-  else if(*ap == MATRIZ) ap += 5;
-  else error("No es un apuntador o matriz");
+  if (*ap == APUNTADOR)
+    ap++;
+  else if (*ap == MATRIZ)
+    ap += 5;
+  else
+    error("No es un apuntador o matriz");
   info[0] = ap;
-  if(*ap == FUNCION || *ap == MATRIZ || *ap == STRUCT)
+  if (*ap == FUNCION || *ap == MATRIZ || *ap == STRUCT)
     return 0;
   else
     return 1;
@@ -908,9 +953,9 @@ nivel13dir(info)
 {
   unsigned char *nuevo_tipo, *tipo;
 
-  if(nivel13(info) == 0) {
+  if (nivel13(info) == 0) {
     tipo = info[0];
-    if(*tipo != STRUCT)
+    if (*tipo != STRUCT)
       error("Dirección ilegal");
   }
   nuevo_tipo = sig_tipo;
@@ -927,7 +972,7 @@ nivel13inc(info)
   int inc;
 
   tipo = info[0];
-  if(*tipo == APUNTADOR) {
+  if (*tipo == APUNTADOR) {
     inc = tam_tipo(tipo + 1);
     tipo = t_int;
   } else
@@ -939,28 +984,29 @@ nivel13dec(info)
   int info[];
 {
   nivel13inc(info);
-  nodo_der[ultimo_nodo] = -nodo_der[ultimo_nodo];
+  ultimo_nodo->der = -(int) ultimo_nodo->der;
 }
 
 nivel13pinc(info)
   int info[];
 {
   nivel13inc(info);
-  oper[ultimo_nodo] = N_PINC;
+  ultimo_nodo->oper = N_PINC;
 }
 
 nivel13pdec(info)
   int info[];
 {
   nivel13dec(info);
-  oper[ultimo_nodo] = N_PINC;
+  ultimo_nodo->oper = N_PINC;
 }
 
 primaria(info, sin_parentesis)
   int info[], sin_parentesis;
 {
   unsigned char *ap, nombre[TAM_NOMBRE];
-  int k, etiq, izq, der, tam, punto;
+  int k, etiq, tam, punto;
+  struct nodo *izq, *der;
   unsigned char *tipo;
   int info2[1];
 
@@ -986,7 +1032,7 @@ primaria(info, sin_parentesis)
       else
         k = 1;
     } else if ((ap = busca_enum(nombre)) != NULL) {
-      crea_nodo(N_CONST, 0, 0, lee_entero(ap + ENUM_VALOR));
+      crea_nodo(N_CONST, NULL, NULL, lee_entero(ap + ENUM_VALOR));
       info[0] = t_int;
       k = 0;
     } else {
@@ -998,7 +1044,7 @@ primaria(info, sin_parentesis)
     k = 0;
   } else {
     error("Expresión inválida");
-    crea_nodo(N_CONST, 0, 0, 0);
+    crea_nodo(N_CONST, NULL, NULL, 0);
     basura();
     info[0] = t_int;
     k = 0;
@@ -1023,32 +1069,40 @@ primaria(info, sin_parentesis)
       else
         tam = tam_tipo(tipo += 5);
       if (tam == 8) {
-        if (oper[ultimo_nodo] == N_CONST)
-          crea_nodo(N_LDNLP, izq, 0, esp[ultimo_nodo] * 2);
-        else
+        if (ultimo_nodo->oper == N_CONST) {
+          der = ultimo_nodo;
+          crea_nodo(N_LDNLP, izq, NULL, der->esp * 2);
+          libera_arbol(der);
+        } else
           crea_nodo(N_IXF, ultimo_nodo, izq, 0);
       } else if (tam == 4) {
-        if (oper[ultimo_nodo] == N_CONST)
-          crea_nodo(N_LDNLP, izq, 0, esp[ultimo_nodo]);
-        else
+        if (ultimo_nodo->oper == N_CONST) {
+          der = ultimo_nodo;
+          crea_nodo(N_LDNLP, izq, NULL, der->esp);
+          libera_arbol(der);
+        } else
           crea_nodo(N_IXP, ultimo_nodo, izq, 0);
       } else if (tam == 1) {
-        if (oper[ultimo_nodo] == N_CONST)
-          crea_nodo(N_CSUMA, izq, 0, esp[ultimo_nodo]);
-        else
+        if (ultimo_nodo->oper == N_CONST) {
+          der = ultimo_nodo;
+          crea_nodo(N_CSUMA, izq, NULL, der->esp);
+          libera_arbol(der);
+        } else
           crea_nodo(N_SUMA, ultimo_nodo, izq, 0);
       } else {
-        if (oper[ultimo_nodo] == N_CONST)
-          crea_nodo(N_CSUMA, izq, 0, esp[ultimo_nodo] * tam);
-        else {
+        if (ultimo_nodo->oper == N_CONST) {
           der = ultimo_nodo;
-          crea_nodo(N_CONST, 0, 0, tam);
+          crea_nodo(N_CSUMA, izq, NULL, der->esp * tam);
+          libera_arbol(der);
+        } else {
+          der = ultimo_nodo;
+          crea_nodo(N_CONST, NULL, NULL, tam);
           crea_nodo(N_MUL, der, ultimo_nodo, 0);
           crea_nodo(N_SUMA, izq, ultimo_nodo, 0);
         }
       }
       info[0] = tipo;
-      if(*tipo == MATRIZ || *tipo == STRUCT)
+      if (*tipo == MATRIZ || *tipo == STRUCT)
         k = 0;
       else
         k = 1;
@@ -1059,50 +1113,56 @@ primaria(info, sin_parentesis)
         error("El tipo no es de función");
       else
         ++tipo;
-      if (oper[ultimo_nodo] == N_APFUNC)
-        llama_funcion(esp[ultimo_nodo], tipo);
+      if (ultimo_nodo->oper == N_APFUNC)
+        llama_funcion(ultimo_nodo->esp, tipo);
       else
         llama_funcion(0, tipo);
       info[0] = tipo;
       k = 0;
     } else {
-      if(match(".")) punto = 1;
-      else if(match("->")) punto = 2;
-      else punto = 0;
-      if(punto) {
-        if(nombre_legal(nombre) == 0)
+      if (match("."))
+        punto = 1;
+      else if (match("->"))
+        punto = 2;
+      else
+        punto = 0;
+      if (punto) {
+        if (nombre_legal(nombre) == 0)
           error("Nombre ilegal para el miembro");
-        if(punto == 2) {
+        if (punto == 2) {
           if (k)
             carga_valor(info);
-          if(*tipo == APUNTADOR) tipo++;
-          else if(*tipo == MATRIZ) tipo += 5;
-          else error("No es un apuntador o matriz");
+          if (*tipo == APUNTADOR)
+            tipo++;
+          else if (*tipo == MATRIZ)
+            tipo += 5;
+          else
+            error("No es un apuntador o matriz");
           info[0] = tipo;
         }
-        if(*tipo != STRUCT) {
+        if (*tipo != STRUCT) {
           error("No es una estructura o unión");
           continue;
         }
         ap = lee_entero(tipo + 1);
-        if(lee_entero(ap + EST_TAM) == 0) {
+        if (lee_entero(ap + EST_TAM) == 0) {
           error("Estructura o unión incompleta");
           continue;
         }
         ap = lee_entero(ap + EST_LISTA);
-        while(ap != NULL) {
-          if(astreq(nombre, ap + MIE_NOMBRE, MAX_NOMBRE)) {
+        while (ap != NULL) {
+          if (astreq(nombre, ap + MIE_NOMBRE, MAX_NOMBRE)) {
             info[0] = tipo = lee_entero(ap + MIE_TIPO);
-            if(*tipo == FUNCION || *tipo == MATRIZ || *tipo == STRUCT)
+            if (*tipo == FUNCION || *tipo == MATRIZ || *tipo == STRUCT)
               k = 0;
             else
               k = 1;
-            crea_nodo(N_CSUMA, ultimo_nodo, 0, lee_entero(ap + MIE_POSICION));
+            crea_nodo(N_CSUMA, ultimo_nodo, NULL, lee_entero(ap + MIE_POSICION));
             break;
           }
           ap = lee_entero(ap + MIE_SIG);
         }
-        if(ap == NULL)
+        if (ap == NULL)
           error("Miembro indefinido");
       } else
         break;
@@ -1125,9 +1185,8 @@ req_valorl()
 llama_funcion(ap, tipo_funcion)
   unsigned char *ap, *tipo_funcion;
 {
-  int info[1];
-  int anterior, primero;
-  int izq, tam;
+  int info[1], tam;
+  struct nodo *izq, *anterior, *primero;
   unsigned char *tipo;
 
   anterior = primero = 0;
@@ -1147,21 +1206,21 @@ llama_funcion(ap, tipo_funcion)
       carga_valor(info);     /* Obtiene un argumento */
     else {
       tipo = info[0];
-      if(*tipo == STRUCT)
+      if (*tipo == STRUCT)
         tam = (tam_tipo(tipo) + 3) / 4;
     }
     tipo = info[0];
-    if(*tipo == DOUBLE)
+    if (*tipo == DOUBLE)
       crea_nodo(N_PARF, ultimo_nodo, tam, 0);
-    else if(*tipo == FLOAT) {
-      crea_nodo(N_CONVFD, ultimo_nodo, 0, 0);
+    else if (*tipo == FLOAT) {
+      crea_nodo(N_CONVFD, ultimo_nodo, NULL, 0);
       crea_nodo(N_PARF, ultimo_nodo, tam, 0);
     } else
       crea_nodo(N_PAR, ultimo_nodo, tam, 0);
     if (primero == 0)
       primero = ultimo_nodo;
     if (anterior != 0)
-      esp[anterior] = ultimo_nodo;
+      anterior->esp = ultimo_nodo;
     anterior = ultimo_nodo;
     if (match(",") == 0)
       break;
@@ -1169,9 +1228,9 @@ llama_funcion(ap, tipo_funcion)
   }
   pide(")");
   if (ap == 0)
-    crea_nodo(N_FUNCI, primero, 0, izq);
+    crea_nodo(N_FUNCI, primero, NULL, izq);
   else
-    crea_nodo(N_FUNC, primero, 0, ap);
+    crea_nodo(N_FUNC, primero, NULL, ap);
 }
 
 /*
@@ -1183,19 +1242,19 @@ carga_valor(info)
   unsigned char *tipo;
   tipo = info[0];
   if (*tipo == CHAR) {
-    crea_nodo(N_CBYTE, ultimo_nodo, 0, 0);
+    crea_nodo(N_CBYTE, ultimo_nodo, NULL, 0);
   } else if (*tipo == SHORT) {
-    crea_nodo(N_CSHORT, ultimo_nodo, 0, 0);
+    crea_nodo(N_CSHORT, ultimo_nodo, NULL, 0);
   } else if (*tipo == USHORT) {
-    crea_nodo(N_CUSHORT, ultimo_nodo, 0, 0);
+    crea_nodo(N_CUSHORT, ultimo_nodo, NULL, 0);
   } else if (*tipo == FLOAT)
-    crea_nodo(N_CFLOAT, ultimo_nodo, 0, 0);
+    crea_nodo(N_CFLOAT, ultimo_nodo, NULL, 0);
   else if (*tipo == DOUBLE)
-    crea_nodo(N_CDOUBLE, ultimo_nodo, 0, 0);
+    crea_nodo(N_CDOUBLE, ultimo_nodo, NULL, 0);
   else if (*tipo == VOID)
     error("Tiene tipo void");
   else
-    crea_nodo(N_CPAL, ultimo_nodo, 0, 0);
+    crea_nodo(N_CPAL, ultimo_nodo, NULL, 0);
 }
 
 /*
@@ -1204,10 +1263,10 @@ carga_valor(info)
 dir_var_loc(var)
   unsigned char *var;
 {
-  crea_nodo(N_LDLP, 0, 0, ((var[POSICION] & 255) +
-                          ((var[POSICION + 1] & 255) << 8) +
-                          ((var[POSICION + 2] & 255) << 16) +
-                          ((var[POSICION + 3] & 255) << 24)));
+  crea_nodo(N_LDLP, NULL, NULL, ((var[POSICION] & 255) +
+                                ((var[POSICION + 1] & 255) << 8) +
+                                ((var[POSICION + 2] & 255) << 16) +
+                                ((var[POSICION + 3] & 255) << 24)));
 }
 
 /*
@@ -1223,7 +1282,7 @@ dir_var_glb(var)
      ((var[POSICION + 2] & 255) << 16) +
      ((var[POSICION + 3] & 255) << 24);
   enlace();
-  crea_nodo(N_LDNLP, ultimo_nodo, 0, j);
+  crea_nodo(N_LDNLP, ultimo_nodo, NULL, j);
 }
 
 /*
@@ -1232,7 +1291,7 @@ dir_var_glb(var)
 dir_func(ap)
   unsigned char *ap;
 {
-  crea_nodo(N_APFUNC, 0, 0, ap);
+  crea_nodo(N_APFUNC, NULL, NULL, ap);
 }
 
 /*
@@ -1240,7 +1299,7 @@ dir_func(ap)
 */
 enlace()
 {
-  crea_nodo(N_LDL, 0, 0, 1);
+  crea_nodo(N_LDL, NULL, NULL, 1);
 }
 
 /*
@@ -1248,20 +1307,22 @@ enlace()
 */
 dobla(tipo, nodo)
   unsigned char *tipo;
-  int nodo;
+  struct nodo *nodo;
 {
   int cuanto;
-  if((*tipo != APUNTADOR) && (*tipo != MATRIZ)) return 0; /* no es necesario */
-  if(*tipo == APUNTADOR)
+
+  if ((*tipo != APUNTADOR) && (*tipo != MATRIZ))
+    return 0;                         /* no es necesario */
+  if (*tipo == APUNTADOR)
     cuanto = tam_tipo(tipo + 1);
   else
     cuanto = tam_tipo(tipo + 5);
-  if(oper[nodo] == N_CONST) {
-    esp[nodo] = esp[nodo] * cuanto;     /* es una constante */
+  if (nodo->oper == N_CONST) {
+    nodo->esp *= cuanto;              /* es una constante */
     return 1;
   }
   multi = cuanto;
-  return 2;    /* optimar segun sea suma o resta */
+  return 2;    /* optimizar segun sea suma o resta */
 }
 
 /*
@@ -1271,7 +1332,7 @@ prueba(etiq, parentesis)
   int etiq, parentesis;
 {
   int info[1];
-  int origen;
+  struct nodo *origen;
   int etiq2;
   unsigned char *tipo;
 
@@ -1283,15 +1344,15 @@ prueba(etiq, parentesis)
     pide(")");
   } else
     compara_no_cero(almacena_expresion(SI));
-  if(oper[ultimo_nodo] == N_CONST) {
-    if(esp[ultimo_nodo] == 0)
+  if (ultimo_nodo->oper == N_CONST) {
+    if (ultimo_nodo->esp == 0)
       salto(etiq);
   } else {
-    if(oper[ultimo_nodo] == N_NOT)
-      if(oper[nodo_izq[ultimo_nodo]] == N_NOT)
-        ultimo_nodo = nodo_izq[nodo_izq[ultimo_nodo]];
-    if((oper[ultimo_nodo] == N_ANDB) ||
-       (oper[ultimo_nodo] == N_ORB)) {
+    if (ultimo_nodo->oper == N_NOT)
+      if (ultimo_nodo->izq->oper == N_NOT)
+        ultimo_nodo = ultimo_nodo->izq->izq;
+    if ((ultimo_nodo->oper == N_ANDB) ||
+        (ultimo_nodo->oper == N_ORB)) {
       etiq_and = etiq;
       etiq_or = nueva_etiq;
       evalua_arbol(SI);
@@ -1304,6 +1365,7 @@ prueba(etiq, parentesis)
       salta_si_falso(etiq);
     }
   }
+  libera_arbol(ultimo_nodo);
   ultimo_nodo = origen;
 }
 
@@ -1314,18 +1376,18 @@ constante(info)
 
   if (queonda = numero_real(val)) {
     if (queonda == 2)
-      crea_nodo(N_CEROPF, 0, 0, 0);
+      crea_nodo(N_CEROPF, NULL, NULL, 0);
     else
-      crea_nodo(N_NUMPF, 0, 0, val[0]);
+      crea_nodo(N_NUMPF, NULL, NULL, val[0]);
     info[0] = t_double;
   } else if (numero(val)) {
-    crea_nodo(N_CONST, 0, 0, val[0]);
+    crea_nodo(N_CONST, NULL, NULL, val[0]);
     info[0] = t_int;
   } else if (cad_caracteres(val)) {
-    crea_nodo(N_CONST, 0, 0, val[0]);
+    crea_nodo(N_CONST, NULL, NULL, val[0]);
     info[0] = t_int;
   } else if (cad_literal(val)) {
-    crea_nodo(N_LIT, 0, 0, val[0]);
+    crea_nodo(N_LIT, NULL, NULL, val[0]);
     info[0] = t_achar;
   } else
     return 0;
@@ -1401,12 +1463,12 @@ numero_real(val)
   if (num == 0)
     return 2;
   for (k = 0; k < const_definidas; ++k) {
-    if(constantes[k].valor == num)
+    if (constantes[k].valor == num)
       break;
   }
   val[0] = k;
-  if(k == const_definidas)
-    if(const_definidas == MAX_CONST)
+  if (k == const_definidas)
+    if (const_definidas == MAX_CONST)
       error("Demasiadas constantes de punto flotante");
     else
       constantes[const_definidas++].valor = num;
@@ -1431,13 +1493,13 @@ numero(val)
   }
   if (isdigit(car_act) == 0)
     return 0;
-  if(car_act == '0') {
-    while(car_act == '0') obt_car();
-    if(toupper(car_act) == 'X') {
+  if (car_act == '0') {
+    while (car_act == '0') obt_car();
+    if (toupper(car_act) == 'X') {
       obt_car();
-      while(isxdigit(car_act)) {
+      while (isxdigit(car_act)) {
         c = toupper(obt_car()) - '0';
-        if(c > 9) c = c - 7;
+        if (c > 9) c = c - 7;
         k = (k << 4) | c;
       }
     } else {
@@ -1448,7 +1510,7 @@ numero(val)
     while (isdigit(car_act))
       k = k * 10 + (obt_car() - '0');
   }
-  if(toupper(car_act) == 'L')
+  if (toupper(car_act) == 'L')
     obt_car();
   if (menos < 0)
     k = -k;
@@ -1465,7 +1527,7 @@ cad_caracteres(val)
   if (match("'") == 0)
     return 0;
   while (car_act != 39)
-    k = (k & 255) * 256 + (caracter_literal() & 255);
+    k = k * 256 + (caracter_literal() & 255);
   ++pos_linea;
   val[0] = k;
   return 1;
@@ -1525,9 +1587,9 @@ caracter_literal()
   }
   if (car_act == 'x') {
     ++pos_linea;
-    while(isxdigit(car_act)) {
+    while (isxdigit(car_act)) {
       i = toupper(obt_car()) - '0';
-      if(i > 9) i = i - 7;
+      if (i > 9) i = i - 7;
       oct = (oct << 4) | i;
     }
     return oct;
@@ -1580,11 +1642,11 @@ compara_no_cero(tipo)
     return;
   izq = ultimo_nodo;
   if (*tipo == DOUBLE)
-    crea_nodo(N_CEROPF, 0, 0, 0);
+    crea_nodo(N_CEROPF, NULL, NULL, 0);
   else
-    crea_nodo(N_CEROF, 0, 0, 0);
+    crea_nodo(N_CEROF, NULL, NULL, 0);
   crea_nodo(N_IGUALPF, izq, ultimo_nodo, 0);
-  crea_nodo(N_NOT, ultimo_nodo, 0, 0);
+  crea_nodo(N_NOT, ultimo_nodo, NULL, 0);
 }
 
 compara_cero(tipo)
@@ -1594,101 +1656,101 @@ compara_cero(tipo)
 
   izq = ultimo_nodo;
   if (*tipo == DOUBLE)
-    crea_nodo(N_CEROPF, 0, 0, 0);
+    crea_nodo(N_CEROPF, NULL, NULL, 0);
   else
-    crea_nodo(N_CEROF, 0, 0, 0);
+    crea_nodo(N_CEROF, NULL, NULL, 0);
   crea_nodo(N_IGUALPF, izq, ultimo_nodo, 0);
 }
 
 convierte_tipo(nodo, tipo_original, nuevo_tipo)
-  int *nodo;
+  struct nodo **nodo;
   unsigned char *tipo_original, *nuevo_tipo;
 {
-  if(*tipo_original == STRUCT && *nuevo_tipo != STRUCT)
+  if (*tipo_original == STRUCT && *nuevo_tipo != STRUCT)
     error("No se puede convertir de estructura");
-  else if(*tipo_original != STRUCT && *nuevo_tipo == STRUCT)
+  else if (*tipo_original != STRUCT && *nuevo_tipo == STRUCT)
     error("No se puede convertir a estructura");
-  else if(*tipo_original == VOID)
+  else if (*tipo_original == VOID)
     error("No se puede convertir de void");
-  else if(*tipo_original == APUNTADOR &&
-         (*nuevo_tipo == DOUBLE || *nuevo_tipo == FLOAT))
+  else if (*tipo_original == APUNTADOR &&
+          (*nuevo_tipo == DOUBLE || *nuevo_tipo == FLOAT))
     error("No se puede convertir un apuntador a real");
-  else if(*nuevo_tipo == APUNTADOR &&
-         (*tipo_original == DOUBLE || *tipo_original == FLOAT))
+  else if (*nuevo_tipo == APUNTADOR &&
+          (*tipo_original == DOUBLE || *tipo_original == FLOAT))
     error("No se puede convertir un real a apuntador");
   else {
-    if(*tipo_original == DOUBLE && *nuevo_tipo == DOUBLE)
+    if (*tipo_original == DOUBLE && *nuevo_tipo == DOUBLE)
       return;
-    if(*tipo_original == FLOAT && *nuevo_tipo == FLOAT)
+    if (*tipo_original == FLOAT && *nuevo_tipo == FLOAT)
       return;
-    if(*tipo_original == DOUBLE && *nuevo_tipo == FLOAT) {
-      crea_nodo(N_CONVDF, *nodo, 0, 0);
+    if (*tipo_original == DOUBLE && *nuevo_tipo == FLOAT) {
+      crea_nodo(N_CONVDF, *nodo, NULL, 0);
       *nodo = ultimo_nodo;
-    } else if(*tipo_original == FLOAT && *nuevo_tipo == DOUBLE) {
-      crea_nodo(N_CONVFD, *nodo, 0, 0);
+    } else if (*tipo_original == FLOAT && *nuevo_tipo == DOUBLE) {
+      crea_nodo(N_CONVFD, *nodo, NULL, 0);
       *nodo = ultimo_nodo;
-    } else if(*tipo_original == DOUBLE || *tipo_original == FLOAT) {
-      crea_nodo(N_PFENT, *nodo, 0, 0);
+    } else if (*tipo_original == DOUBLE || *tipo_original == FLOAT) {
+      crea_nodo(N_PFENT, *nodo, NULL, 0);
       *nodo = ultimo_nodo;
-    } else if(*nuevo_tipo == FLOAT) {
-      crea_nodo(N_ENTF, *nodo, 0, 0);
+    } else if (*nuevo_tipo == FLOAT) {
+      crea_nodo(N_ENTF, *nodo, NULL, 0);
       *nodo = ultimo_nodo;
-    } else if(*nuevo_tipo == DOUBLE) {
-      crea_nodo(N_ENTPF, *nodo, 0, 0);
+    } else if (*nuevo_tipo == DOUBLE) {
+      crea_nodo(N_ENTPF, *nodo, NULL, 0);
       *nodo = ultimo_nodo;
     }
   }
 }
 
 haz_compatible(nodo_izq, info_izq, nodo_der, info_der)
-  int *nodo_izq, *nodo_der;
+  struct nodo **nodo_izq, **nodo_der;
   int info_izq[], info_der[];
 {
   unsigned char *tipo_izq, *tipo_der;
 
   tipo_izq = info_izq[0];
   tipo_der = info_der[0];
-  if(*tipo_izq == STRUCT || *tipo_der == STRUCT)
-    error("No se pueden hacer operaciones con estructuras");
-  if(*tipo_izq == FLOAT && *tipo_der == FLOAT)
+  if (*tipo_izq == STRUCT || *tipo_der == STRUCT)
+    error("No se pueden efectuar operaciones con estructuras");
+  if (*tipo_izq == FLOAT && *tipo_der == FLOAT)
     return 1;
-  if(*tipo_izq == DOUBLE && *tipo_der == DOUBLE)
+  if (*tipo_izq == DOUBLE && *tipo_der == DOUBLE)
     return 1;
-  if((*tipo_izq == FLOAT && *tipo_der == DOUBLE)
+  if ((*tipo_izq == FLOAT && *tipo_der == DOUBLE)
   || (*tipo_izq == DOUBLE && *tipo_der == FLOAT)) {
-    if(*tipo_izq == FLOAT) {
-      crea_nodo(N_CONVFD, *nodo_izq, 0, 0);
+    if (*tipo_izq == FLOAT) {
+      crea_nodo(N_CONVFD, *nodo_izq, NULL, 0);
       *nodo_izq = ultimo_nodo;
     } else {
-      crea_nodo(N_CONVFD, *nodo_der, 0, 0);
+      crea_nodo(N_CONVFD, *nodo_der, NULL, 0);
       *nodo_der = ultimo_nodo;
     }
     info_izq[0] = t_double;
     return 1;
   }
-  if(*tipo_izq == FLOAT || *tipo_der == FLOAT) {
-    if(*tipo_izq == FLOAT) {
-      crea_nodo(N_ENTF, *nodo_der, 0, 0);
+  if (*tipo_izq == FLOAT || *tipo_der == FLOAT) {
+    if (*tipo_izq == FLOAT) {
+      crea_nodo(N_ENTF, *nodo_der, NULL, 0);
       *nodo_der = ultimo_nodo;
     } else {
-      crea_nodo(N_ENTF, *nodo_izq, 0, 0);
+      crea_nodo(N_ENTF, *nodo_izq, NULL, 0);
       *nodo_izq = ultimo_nodo;
     }
     info_izq[0] = t_float;
     return 1;
   }
-  if(*tipo_izq == DOUBLE || *tipo_der == DOUBLE) {
-    if(*tipo_izq == DOUBLE) {
-      crea_nodo(N_ENTPF, *nodo_der, 0, 0);
+  if (*tipo_izq == DOUBLE || *tipo_der == DOUBLE) {
+    if (*tipo_izq == DOUBLE) {
+      crea_nodo(N_ENTPF, *nodo_der, NULL, 0);
       *nodo_der = ultimo_nodo;
     } else {
-      crea_nodo(N_ENTPF, *nodo_izq, 0, 0);
+      crea_nodo(N_ENTPF, *nodo_izq, NULL, 0);
       *nodo_izq = ultimo_nodo;
     }
     info_izq[0] = t_double;
     return 1;
   }
-  if((*tipo_izq == UINT || *tipo_der == UINT)
+  if ((*tipo_izq == UINT || *tipo_der == UINT)
   && (*tipo_izq != APUNTADOR && *tipo_der != APUNTADOR)
   && (*tipo_izq != MATRIZ && *tipo_der != MATRIZ))
     info_izq[0] = info_der[0] = t_uint;
