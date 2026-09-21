@@ -12,8 +12,6 @@
 ** Revisión: 22 de noviembre de 1995. Incluyo el camino a la unidad c:
 */
 
-#include <stdio.h>
-
 #include "CCvars.c"    /* Variables y definiciones.           */
 #include "CCinter.c"   /* Interfaz con el usuario.            */
 #include "CCanasin.c"  /* Análisis sintáctico de alto nivel.  */

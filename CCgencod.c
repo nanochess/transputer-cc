@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Generador de Codigo.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 3 de junio de 1995.
 ** Revisión: 20 de julio de 1995. Optimación de sumas de constantes que son
@@ -82,7 +84,6 @@
 ** Revisión: 20 de junio de 1996. Corrección de un defecto en la generación
 **                                de la dirección para N_COPIA, cuando N_COPIA
 **                                era descendiente de otro N_COPIA.
-** Revisión: 11 de marzo de 2025. Parche para temporales float.
 */
 
 /*
@@ -297,15 +298,15 @@ gen_oper(oper, rev)
   else if (oper == N_CONVDF)
     emite_linea("fpur64tor32");
   else if (oper == N_ENTF) {
-    emite_texto("ajw -1\r\nstl 0\r\nldlp 0\r\nfpi32tor32\r\najw 1\r\n");
+    emite_texto("ajw -1\nstl 0\nldlp 0\nfpi32tor32\najw 1\n");
   } else if (oper == N_ENTPF) {
-    emite_texto("ajw -1\r\nstl 0\r\nldlp 0\r\nfpi32tor64\r\najw 1\r\n");
+    emite_texto("ajw -1\nstl 0\nldlp 0\nfpi32tor64\najw 1\n");
   } else if (oper == N_PFENT) {
-    emite_texto("ajw -1\r\nldlp 0\r\nfpstnli32\r\nldl 0\r\najw 1\r\n");
+    emite_texto("ajw -1\nldlp 0\nfpstnli32\nldl 0\najw 1\n");
   } else if (oper == N_SMAYOR) {
     if (!rev)
       emite_linea("rev");
-    emite_texto("mint\r\nxor\r\nrev\r\nmint\r\nxor\r\ngt\r\n");
+    emite_texto("mint\nxor\nrev\nmint\nxor\ngt\n");
   } else {
     if (rev) {
       if (oper == N_MAYORPF || oper == N_RESTAPF || oper == N_DIVPF)
@@ -466,7 +467,7 @@ gen_nodo(nodo)
         }
       gen_nodo(esp[nodo]);
       ins("ldl ", 1 - pila);
-      emite_texto("ldc 3\r\nldpi\r\nstl 0\r\nstl 1\r\ngcall\r\n");
+      emite_texto("ldc 3\nldpi\nstl 0\nstl 1\ngcall\n");
       pila += 4;
     }
     if(nodo_der[nodo])
@@ -814,11 +815,11 @@ gen_nodo(nodo)
       recupera(0);
     }
     if(req_res)
-      emite_texto("ajw -1\r\ndup\r\nstl 0\r\n");
+      emite_texto("ajw -1\ndup\nstl 0\n");
     ins("ldc ", esp[nodo]);
     emite_linea("move");
     if(req_res)
-      emite_texto("ldl 0\r\najw 1\r\n");
+      emite_texto("ldl 0\najw 1\n");
     pila = desp_pila(pila_extra);
     return;
   }
@@ -900,16 +901,16 @@ gen_nodo(nodo)
         rev = SI;
       } else {
         gen_nodo(nodo_der[nodo]);
-        salva(esp[nodo] ? 2 : 1);
+        salva(1);
         gen_nodo(nodo_izq[nodo]);
         if(op == N_SUMAPF) {
-          recupera(esp[nodo] ? 5 : 2);
+          recupera(2);
           return;
         } else if(op == N_MULPF) {
-          recupera(esp[nodo] ? 6 : 3);
+          recupera(3);
           return;
         }
-        recupera(esp[nodo] ? 4 : 1);
+        recupera(1);
       }
     } else {
       if ((regs[nodo_izq[nodo]] >= regs[nodo_der[nodo]]) &&
@@ -1093,7 +1094,7 @@ copia_resultado(tam)
 
 asigna(nodo, posicion, tipo)
   int nodo, posicion;
-  char *tipo;
+  unsigned char *tipo;
 {
   es_control = NO;
   gen_codigo(nodo);
@@ -1111,7 +1112,7 @@ asigna(nodo, posicion, tipo)
 ** Genera una instrucción con operando.
 */
 ins(codigo, valor)
-  char *codigo;
+  unsigned char *codigo;
   int valor;
 {
   emite_texto(codigo);
@@ -1178,9 +1179,9 @@ epilogo()
     emite_linea("stl 0");
     ins("ldc ", pos_global - 3);
     emite_linea("stl 1");
-    emite_texto("INICIO2:\r\nldc 0\r\nldl 0\r\nstnl 0\r\nldl 0\r\n");
-    emite_texto("adc 4\r\nstl 0\r\nldl 1\r\nadc -1\r\nstl 1\r\n");
-    emite_texto("ldl 1\r\neqc 0\r\ncj INICIO2\r\n");
+    emite_texto("INICIO2:\nldc 0\nldl 0\nstnl 0\nldl 0\n");
+    emite_texto("adc 4\nstl 0\nldl 1\nadc -1\nstl 1\n");
+    emite_texto("ldl 1\neqc 0\ncj INICIO2\n");
   }
   ins("ldl ", pos_total + 3);
   ins("ldl ", pos_total + 2);
@@ -1212,14 +1213,14 @@ epilogo()
 */
 libreria()
 {
-  emite_texto("LIB_CSHORT:\r\nldl 1\r\nlb\r\nldl 1\r\nadc 1\r\n");
-  emite_texto("lb\r\nldc 8\r\nshl\r\nor\r\nldc 0x8000\r\nxword\r\n");
-  emite_texto("stl 1\r\nldl 3\r\nldl 2\r\nldl 1\r\nret\r\n");
-  emite_texto("LIB_CUSHORT:\r\nldl 1\r\nlb\r\nldl 1\r\nadc 1\r\n");
-  emite_texto("lb\r\nldc 8\r\nshl\r\nor\r\nstl 1\r\nldl 3\r\n");
-  emite_texto("ldl 2\r\nldl 1\r\nret\r\n");
-  emite_texto("LIB_GSHORT:\r\nldl 2\r\nldl 1\r\nsb\r\nldl 2\r\n");
-  emite_texto("ldc 8\r\nshr\r\nldl 1\r\nadc 1\r\nsb\r\nldl 3\r\nret\r\n");
+  emite_texto("LIB_CSHORT:\nldl 1\nlb\nldl 1\nadc 1\n");
+  emite_texto("lb\nldc 8\nshl\nor\nldc 0x8000\nxword\n");
+  emite_texto("stl 1\nldl 3\nldl 2\nldl 1\nret\n");
+  emite_texto("LIB_CUSHORT:\nldl 1\nlb\nldl 1\nadc 1\n");
+  emite_texto("lb\nldc 8\nshl\nor\nstl 1\nldl 3\n");
+  emite_texto("ldl 2\nldl 1\nret\n");
+  emite_texto("LIB_GSHORT:\nldl 2\nldl 1\nsb\nldl 2\n");
+  emite_texto("ldc 8\nshr\nldl 1\nadc 1\nsb\nldl 3\nret\n");
 }
 
 /*
@@ -1227,7 +1228,7 @@ libreria()
 ** palabras reservadas del ensamblador.
 */
 emite_nombre(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   emite_texto("q");
   emite_texto(nombre);
@@ -1239,14 +1240,11 @@ emite_nombre(nombre)
 salva(flotante)
   int flotante;
 {
-  if(flotante == 1) {
-    emite_texto("ajw -2\r\nldlp 0\r\nfpstnldb\r\n");
+  if(flotante) {
+    emite_texto("ajw -2\nldlp 0\nfpstnldb\n");
     pila -= 2;
-  } else if(flotante == 2) {
-    emite_texto("ajw -1\r\nldlp 0\r\nfpstnlsn\r\n");
-    --pila;
   } else {
-    emite_texto("ajw -1\r\nstl 0\r\n");
+    emite_texto("ajw -1\nstl 0\n");
     --pila;
   }
 }
@@ -1265,21 +1263,10 @@ recupera(flotante)
       emite_linea("fpldnladddb");
     else if(flotante == 3)
       emite_linea("fpldnlmuldb");
-    else if(flotante == 4)
-      emite_linea("fpldnlsn");
-    else if(flotante == 5)
-      emite_linea("fpldnladdsn");
-    else if(flotante == 6)
-      emite_linea("fpldnlmulsn");
-    if(flotante < 4) {
-      emite_linea("ajw 2");
-      pila += 2;
-    } else {
-      emite_linea("ajw 1");
-      ++pila;
-    }
+    emite_linea("ajw 2");
+    pila += 2;
   } else {
-    emite_texto("ldl 0\r\najw 1\r\n");
+    emite_texto("ldl 0\najw 1\n");
     ++pila;
   }
 }
@@ -1300,7 +1287,7 @@ copia_reg(flotante)
 ** Llama a la función especificada.
 */
 llamada(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   emite_texto("call ");
   emite_nombre(nombre);

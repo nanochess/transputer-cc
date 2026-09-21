@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Interfaz con el usuario.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 4 de junio de 1995.
 ** Revisión: 26 de julio de 1995. Ahora ap_mac se inicializa a 1.
@@ -37,6 +39,7 @@ main()
     cierra_salida();        /* Cierra la salida */
     reporta_errores();      /* Reporta errores detectados */
   }
+  color(7);
 }
 
 /*
@@ -101,10 +104,21 @@ inicializa()
 /*
 ** Selecciona un color
 */
-color(col) int col; {
+color(col)
+  int col;
+{
   putchar(0x1b);
-  putchar(1);
-  putchar(col);
+  putchar(0x5b);
+  putchar(0x30);
+  putchar(0x3b);
+  putchar(0x33);
+  if (col >= 8) {
+    putchar(0x30 + (col - 8));
+    putchar(0x3b);
+    putchar(0x31);
+  } else
+    putchar(0x30 + col);
+  putchar(0x6d);
 }
 
 /*
@@ -231,7 +245,7 @@ nuevo_archivo()
 */
 p_include()
 {
-  char *rastreo, *comienzo;
+  unsigned char *rastreo, *comienzo;
   int estatus;
 
   espacios();           /* Salta los espacios */

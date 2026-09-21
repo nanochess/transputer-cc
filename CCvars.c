@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Definiciones de variables.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 2 de junio de 1995.
 ** Revisión: 25 de julio de 1995. Se agregan N_ANDB y N_ORB, se comentan
@@ -58,9 +60,11 @@
 ** Revisión: 1o. de diciembre de 1995. Se añaden las macros N_ENTF y N_CONVDF.
 ** Revisión: 1o. de enero de 1996. Mejoras mínimas.
 ** Revisión: 20 de junio de 1996. Se añade la macro NIVEL.
+** Revisión: 6 de mayo de 1998. Se convierten los char a unsigned char,
+**                              para maxima portabilidad.
 */
  
-#define PROGRAMA     "Compilador de C para transputer  (c) Copyright 1995-1996 Oscar Toledo G."
+#define PROGRAMA     "Compilador de C para G10  (c) Oscar Toledo G.1996"
 
 #define NO           0
 #define SI           1
@@ -95,7 +99,7 @@
 
 #define VARIABLE     1
 #define ETIQUETA     2
-#define FUNCION      3
+/*#define FUNCION      12   Definido más abajo*/
 #define TYPEDEF      4
 
 /* Valores posibles para "CLASE" */
@@ -200,8 +204,8 @@
 
 /* Reserva espacio para las variables */
 
-char *ap_glb, *ap_loc;  /* Apuntadores a las sigs. entradas libres en */
-                        /* la tabla de nombres */
+unsigned char *ap_glb,  /* Apuntadores a las sigs. entradas libres en */
+              *ap_loc;  /* la tabla de nombres */
 
 int *ultimo_bucle;      /* Apuntador al último bucle abierto */
 
@@ -242,6 +246,7 @@ int sig_etiq,           /* Siguiente etiqueta disponible */
     casos[MAX_CASOS],   /* Hasta 100 cases */
     incl[MAX_INCL];     /* Almacenamiento de #include */
 
+unsigned
 char *funcion_actual,   /* Apuntador a la definicion de la función actual */
      *sig_tipo,         /* Sig. posición disponible en la tabla de tipos */
      *tipo_basico,      /* Tipo básico de la declaración actual */
@@ -257,27 +262,28 @@ char *funcion_actual,   /* Apuntador a la definicion de la función actual */
      *t_achar,          /* Tipo apuntador a char */
      *t_func;           /* Función que retorna int */
 
+unsigned
 char *lista_estruct,    /* Lista de nombres de estructuras */
      *ultima_estruct,   /* Ultima estructura definida */
      *lista_enum,       /* Lista de constantes de enumeradores */
      *ultimo_enum;      /* Ultimo enumerador definido */
 
-char *ap_c;             /* Apuntador de trabajo */
+unsigned char *ap_c;    /* Apuntador de trabajo */
 int *ap_e;              /* Apuntador de trabajo */
 int pos_global;         /* Posición para variables estáticas */
 int usa_expr;           /* Indica si se usa el resultado de la expr. */
 
-char args[2];           /* Indica si las dos palabras están ocupadas */
+unsigned char args[2],  /* Indica si las dos palabras están ocupadas */
                         /* Un call asigna 4 palabras, una es el retorno y */
                         /* otra el enlace estático, las otras dos pueden */
                         /* ser argumentos o estar desocupadas */
-char linea[TAM_LINEA];  /* Buffer de analisis */
-char linea_m[TAM_LINEA];/* Buffer para el preproceso */
-char lits[TAM_LITS];    /* Almacenamiento de cadenas literales */
-char macs[TAM_MAC];     /* Buffer de macros */
-char amacs[TAM_AMAC];   /* Buffer para argumentos de macros */
-char tipos[TAM_TIPOS];  /* Tabla de tipos */
-char tabla[TAM_TABLA];  /* Tabla de nombres */
+     linea[TAM_LINEA],  /* Buffer de analisis */
+     linea_m[TAM_LINEA],/* Buffer para el preproceso */
+     lits[TAM_LITS],    /* Almacenamiento de cadenas literales */
+     macs[TAM_MAC],     /* Buffer de macros */
+     amacs[TAM_AMAC],   /* Buffer para argumentos de macros */
+     tipos[TAM_TIPOS],  /* Tabla de tipos */
+     tabla[TAM_TABLA];  /* Tabla de nombres */
 
 #define MAX_INIC   48   /* Máximo número de inicializaciones de variables */
                         /* automáticas locales * 3. */
@@ -305,6 +311,7 @@ int multi;               /* Multiplicación para suma y resta con apuntadores */
 
 union {
   double valor;          /* Valor de la constante */
+  unsigned
   char byte[TAM_DOUBLE]; /* Esto es dependiente de la máquina */
 } constantes[MAX_CONST];
 

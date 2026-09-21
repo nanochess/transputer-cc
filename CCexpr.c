@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Evaluador de Expresiones.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 4 de junio de 1995.
 ** Revisión: 20 de julio de 1995. Ahora efectua correctamente suma y resta
@@ -69,7 +71,6 @@
 **                                codigo para el operador trinario.
 ** Revisión: 15 de abril de 1996. Corrección de un defecto que no permitia el
 **                                acceso a estructuras en matrices.
-** Revisión: 11 de marzo de 2025. Parche para temporales float.
 */
 
 /*
@@ -94,7 +95,7 @@ evalua_arbol(control)
 expresion()
 {
   int origen;
-  char *tipo;
+  unsigned char *tipo;
 
   origen = ultimo_nodo;
   tipo = almacena_expresion(SI);
@@ -109,7 +110,7 @@ expresion()
 expr_constante()
 {
   int origen, valor;
-  char *tipo;
+  unsigned char *tipo;
 
   origen = ultimo_nodo;
   checa_entero(almacena_expresion(SI));
@@ -163,7 +164,7 @@ nivel1(info)
 {
   int k, info2[1];
   int der, izq, op;
-  char *tipo, *tipo2;
+  unsigned char *tipo, *tipo2;
 
   k = nivel2(info);
   if (match("="))
@@ -405,7 +406,9 @@ nivel7(info)
   return 0;
 }
 
-nivel8(info) int info[]; {
+nivel8(info)
+  int info[];
+{
   int k, info2[1];
   int izq, der;
 
@@ -423,7 +426,7 @@ nivel8(info) int info[]; {
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2))
-        crea_nodo(N_IGUALPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_IGUALPF, izq, der, 0);
       else if(oper[der] == N_CONST) {
         if(oper[izq] == N_CONST)
           crea_nodo(N_CONST, 0, 0, esp[izq] == esp[der]);
@@ -438,7 +441,7 @@ nivel8(info) int info[]; {
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2)) {
-        crea_nodo(N_IGUALPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_IGUALPF, izq, der, 0);
         crea_nodo(N_NOT, ultimo_nodo, 0, 0);
       } else if(oper[der] == N_CONST) {
         if(oper[izq] == N_CONST)
@@ -496,7 +499,7 @@ nivel9eval(k, info)
 {
   int info2[1];
   int izq, der;
-  char *tipo;
+  unsigned char *tipo;
 
   izq = ultimo_nodo;
   if (nivel10(info2))
@@ -504,9 +507,9 @@ nivel9eval(k, info)
   der = ultimo_nodo;
   if (haz_compatible(&izq, info, &der, info2)) {
     if(k == 4 || k == 1)
-      crea_nodo(N_MAYORPF, izq, der, *((char *) info[0]) == FLOAT);
+      crea_nodo(N_MAYORPF, izq, der, 0);
     else
-      crea_nodo(N_MAYORPF, der, izq, *((char *) info[0]) == FLOAT);
+      crea_nodo(N_MAYORPF, der, izq, 0);
     if(k == 1 || k == 2)
       crea_nodo(N_NOT, ultimo_nodo, 0, 0);
     info[0] = t_int;
@@ -612,7 +615,7 @@ nivel11(info)
 {
   int k, info2[1];
   int izq, der, tam;
-  char *tipo;
+  unsigned char *tipo;
 
   k = nivel12(info);
   if ((encuentra("+") == 0) &&
@@ -628,7 +631,7 @@ nivel11(info)
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2)) {
-        crea_nodo(N_SUMAPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_SUMAPF, izq, der, 0);
       } else {
         if(k = dobla(info[0], der)) {
           if(k == 2 && multi == 4) {
@@ -667,7 +670,7 @@ nivel11(info)
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2)) {
-        crea_nodo(N_RESTAPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_RESTAPF, izq, der, 0);
       } else {
         tipo = info[0];
         if(*tipo == APUNTADOR || *tipo == MATRIZ) {
@@ -733,7 +736,7 @@ nivel12(info)
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2)) {
-        crea_nodo(N_MULPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_MULPF, izq, der, 0);
       } else {
         checa_entero(info[0]);
         checa_entero(info2[0]);
@@ -748,7 +751,7 @@ nivel12(info)
         carga_valor(info2);
       der = ultimo_nodo;
       if(haz_compatible(&izq, info, &der, info2)) {
-        crea_nodo(N_DIVPF, izq, der, *((char *) info[0]) == FLOAT);
+        crea_nodo(N_DIVPF, izq, der, 0);
       } else {
         checa_entero(info[0]);
         checa_entero(info2[0]);
@@ -777,7 +780,7 @@ nivel13(info)
   int info[];
 {
   int k, p;
-  char *tipo, *tipo2;
+  unsigned char *tipo, *tipo2;
 
   if (match("++")) {
     if (nivel13(info) == 0)
@@ -884,7 +887,7 @@ nivel13ap(info)
   int info[];
 {
   int k;
-  char *ap;
+  unsigned char *ap;
 
   k = nivel13(info);
   if (k)
@@ -903,7 +906,7 @@ nivel13ap(info)
 nivel13dir(info)
   int info[];
 {
-  char *nuevo_tipo, *tipo;
+  unsigned char *nuevo_tipo, *tipo;
 
   if(nivel13(info) == 0) {
     tipo = info[0];
@@ -920,7 +923,7 @@ nivel13dir(info)
 nivel13inc(info)
   int info[];
 {
-  char *tipo;
+  unsigned char *tipo;
   int inc;
 
   tipo = info[0];
@@ -956,9 +959,9 @@ nivel13pdec(info)
 primaria(info, sin_parentesis)
   int info[], sin_parentesis;
 {
-  char *ap, nombre[TAM_NOMBRE];
+  unsigned char *ap, nombre[TAM_NOMBRE];
   int k, etiq, izq, der, tam, punto;
-  char *tipo;
+  unsigned char *tipo;
   int info2[1];
 
   if (sin_parentesis || match("(")) {
@@ -1120,12 +1123,12 @@ req_valorl()
 ** nombrada o a una función indirecta.
 */
 llama_funcion(ap, tipo_funcion)
-  char *ap, *tipo_funcion;
+  unsigned char *ap, *tipo_funcion;
 {
   int info[1];
   int anterior, primero;
   int izq, tam;
-  char *tipo;
+  unsigned char *tipo;
 
   anterior = primero = 0;
   espacios();                /* Ya ha sido tomado el parentesis inicial */
@@ -1177,7 +1180,7 @@ llama_funcion(ap, tipo_funcion)
 carga_valor(info)
   int info[];
 {
-  char *tipo;
+  unsigned char *tipo;
   tipo = info[0];
   if (*tipo == CHAR) {
     crea_nodo(N_CBYTE, ultimo_nodo, 0, 0);
@@ -1199,7 +1202,7 @@ carga_valor(info)
 ** Carga la dirección de una variable local
 */
 dir_var_loc(var)
-  char *var;
+  unsigned char *var;
 {
   crea_nodo(N_LDLP, 0, 0, ((var[POSICION] & 255) +
                           ((var[POSICION + 1] & 255) << 8) +
@@ -1211,7 +1214,7 @@ dir_var_loc(var)
 ** Carga la dir. de una variable global.
 */
 dir_var_glb(var)
-  char *var;
+  unsigned char *var;
 {
   int j;
 
@@ -1227,7 +1230,7 @@ dir_var_glb(var)
 ** Carga la dir. de una función.
 */
 dir_func(ap)
-  char *ap;
+  unsigned char *ap;
 {
   crea_nodo(N_APFUNC, 0, 0, ap);
 }
@@ -1244,7 +1247,7 @@ enlace()
 ** Checa si es necesario doblar para suma o resta con apuntadores.
 */
 dobla(tipo, nodo)
-  char *tipo;
+  unsigned char *tipo;
   int nodo;
 {
   int cuanto;
@@ -1270,7 +1273,7 @@ prueba(etiq, parentesis)
   int info[1];
   int origen;
   int etiq2;
-  char *tipo;
+  unsigned char *tipo;
 
   origen = ultimo_nodo;
   usa_expr = SI;
@@ -1333,7 +1336,7 @@ numero_real(val)
   int val[];
 {
   double num, escala;
-  char *comienzo, *codigo;
+  unsigned char *comienzo, *codigo;
   int k, menos;
 
   comienzo = codigo = linea + pos_linea;
@@ -1414,7 +1417,7 @@ numero(val)
   int val[];
 {
   int k, menos;
-  char c;
+  unsigned char c;
 
   k = menos = 1;
   while (k) {
@@ -1471,7 +1474,7 @@ cad_caracteres(val)
 cad_literal(val)
   int val[];
 {
-  char c;
+  unsigned char c;
 
   if (match("\"") == 0)
     return 0;
@@ -1544,7 +1547,7 @@ caracter_literal()
 */
 
 checa_entero(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   if (*tipo != CHAR && *tipo != SHORT && *tipo != INT
    && *tipo != USHORT && *tipo != UINT)
@@ -1552,7 +1555,7 @@ checa_entero(tipo)
 }
 
 checa_numerico(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   if (*tipo != CHAR && *tipo != SHORT && *tipo != INT
    && *tipo != USHORT && *tipo != UINT && *tipo != DOUBLE
@@ -1561,7 +1564,7 @@ checa_numerico(tipo)
 }
 
 checa_entero_o_apuntador(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   if (*tipo != CHAR && *tipo != SHORT && *tipo != INT
    && *tipo != USHORT && *tipo != UINT && *tipo != APUNTADOR)
@@ -1569,7 +1572,7 @@ checa_entero_o_apuntador(tipo)
 }
 
 compara_no_cero(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   int izq;
 
@@ -1585,7 +1588,7 @@ compara_no_cero(tipo)
 }
 
 compara_cero(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   int izq;
 
@@ -1599,7 +1602,7 @@ compara_cero(tipo)
 
 convierte_tipo(nodo, tipo_original, nuevo_tipo)
   int *nodo;
-  char *tipo_original, *nuevo_tipo;
+  unsigned char *tipo_original, *nuevo_tipo;
 {
   if(*tipo_original == STRUCT && *nuevo_tipo != STRUCT)
     error("No se puede convertir de estructura");
@@ -1641,7 +1644,7 @@ haz_compatible(nodo_izq, info_izq, nodo_der, info_der)
   int *nodo_izq, *nodo_der;
   int info_izq[], info_der[];
 {
-  char *tipo_izq, *tipo_der;
+  unsigned char *tipo_izq, *tipo_der;
 
   tipo_izq = info_izq[0];
   tipo_der = info_der[0];

@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Preprocesador y funciones varias.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 1 de junio de 1995.
 ** Revisión: 25 de julio de 1995. Nueva función, isspace().
@@ -60,10 +62,10 @@ nuevo_bucle(ap)
 ** Una nueva variable/función global.
 */
 nueva_glb(nombre, id, clase, tipo, valor)
-  char *nombre, *tipo;
+  unsigned char *nombre, *tipo;
   int valor, clase, id;
 {
-  char *ap;
+  unsigned char *ap;
 
   if (ap_glb >= FIN_GLB) {
     error("Tabla global llena");
@@ -85,10 +87,10 @@ nueva_glb(nombre, id, clase, tipo, valor)
 ** Una nueva variable local.
 */
 nueva_loc(nombre, id, clase, tipo, valor)
-  char *nombre, *tipo;
+  unsigned char *nombre, *tipo;
   int valor, clase, id;
 {
-  char *ap;
+  unsigned char *ap;
 
   if (ap_loc >= FIN_LOC) {
     error("Tabla local llena");
@@ -110,9 +112,9 @@ nueva_loc(nombre, id, clase, tipo, valor)
 ** Una nueva estructura.
 */
 nueva_estructura(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
   int conteo;
 
   if(ultima_estruct != NULL)
@@ -133,9 +135,9 @@ nueva_estructura(nombre)
 ** Un nuevo miembro de una estructura.
 */
 nuevo_miembro(lista, nombre)
-  char **lista, *nombre;
+  unsigned char **lista, *nombre;
 {
-  char *sig, *nuevo;
+  unsigned char *sig, *nuevo;
   int conteo;
 
   if(*lista == NULL)
@@ -160,7 +162,7 @@ nuevo_miembro(lista, nombre)
 ** Una nueva constante de un enumerador.
 */
 nuevo_enum(nombre, valor)
-  char *nombre;
+  unsigned char *nombre;
   int valor;
 {
   int conteo;
@@ -186,9 +188,9 @@ nuevo_enum(nombre, valor)
 ** Busca una variable/función global.
 */
 busca_glb(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
 
   ap = INICIO_GLB;
   while (ap != ap_glb) {
@@ -203,9 +205,9 @@ busca_glb(nombre)
 ** Busca una variable/función local.
 */
 busca_loc(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
 
   ap = ap_loc;
   while (ap != INICIO_LOC) {
@@ -220,9 +222,9 @@ busca_loc(nombre)
 ** Busca una estructura.
 */
 busca_estructura(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
 
   ap = lista_estruct;
   while (ap != NULL) {
@@ -237,7 +239,7 @@ busca_estructura(nombre)
 ** Busca un miembro de estructura.
 */
 busca_miembro(lista, nombre)
-  char *lista, *nombre;
+  unsigned char *lista, *nombre;
 {
   while (lista != NULL) {
     if (astreq(nombre, lista + MIE_NOMBRE, MAX_NOMBRE))
@@ -251,9 +253,9 @@ busca_miembro(lista, nombre)
 ** Busca un enumerador.
 */
 busca_enum(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
 
   ap = lista_enum;
   while (ap != NULL) {
@@ -268,10 +270,10 @@ busca_enum(nombre)
 ** Checa si la proxima cadena de entrada es un nombre legal.
 */
 nombre_legal(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   int k;
-  char c;
+  unsigned char c;
 
   espacios();
   if (letra(car_act) == 0)
@@ -291,10 +293,10 @@ nombre_legal(nombre)
 ** Imprime un retorno de carro y una cadena a la consola.
 */
 mensaje(cad)
-  char *cad;
+  unsigned char *cad;
 {
-  puts("\r\n");
-  puts(cad);
+  fputs("\n", stdout);
+  fputs(cad, stdout);
 }
 
 /*
@@ -391,7 +393,7 @@ lee_linea()
 preprocesa()
 {
   int k, car, hay_if;
-  char c, nombre[TAM_NOMBRE], *def, *busqueda;
+  unsigned char c, nombre[TAM_NOMBRE], *def, *busqueda;
   int subs, pars, args, paren, m;
 
   hay_if = 0;
@@ -580,7 +582,8 @@ preprocesa()
 ** Primer paso del preprocesamiento, pega líneas terminadas en \, y
 ** elimina los comentarios.
 */
-primer_paso() {
+primer_paso()
+{
   int car;
 
   lee_linea();
@@ -611,7 +614,7 @@ primer_paso() {
 }
 
 almacena_car(c)
-  char c;
+  unsigned char c;
 {
   linea_m[pos_linea_m] = c;
   if (pos_linea_m < MAX_LINEA)
@@ -689,12 +692,12 @@ pp_comentarios()
 */
 nueva_macro()
 {
-  char nombre[TAM_NOMBRE];
+  unsigned char nombre[TAM_NOMBRE];
   int k, car;
   int num_args;
   int l;        /* indice en la tabla de argumentos de macros */
   int numero;
-  char *busqueda;
+  unsigned char *busqueda;
 
   if (nombre_legal(nombre) == 0) {
     nombre_ilegal();
@@ -768,7 +771,9 @@ nueva_macro()
 /*
 ** Elimina una macro de la tabla.
 */
-borra_macro(nombre) char *nombre; {
+borra_macro(nombre)
+  unsigned char *nombre;
+{
   int k, l, m;
 
   if(k = busca_macro(nombre)) {    /* Obtiene el comienzo de la macro */
@@ -784,7 +789,7 @@ borra_macro(nombre) char *nombre; {
 }
 
 pone_macro(c)
-  char c;
+  unsigned char c;
 {
   macs[ap_mac] = c;
   if (ap_mac < MAX_MAC)
@@ -796,7 +801,7 @@ pone_macro(c)
 ** Busca una macro en la tabla.
 */
 busca_macro(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   int k;
 
@@ -835,7 +840,7 @@ hacia_archivo()
 ** Manda un caracter a la salida.
 */
 emite_car(c)
-  char c;
+  unsigned char c;
 {
   if (c == 0)
     return 0;
@@ -855,18 +860,17 @@ emite_car(c)
 */
 emite_nueva_linea()
 {
-  emite_car(13);
-  emite_car(10);
+  emite_car('\n');
 }
 
 /*
 ** Ilustra los mensajes de error.
 */
 error(ap)
-  char ap[];
+  unsigned char ap[];
 {
   int k;
-  char entrada[81];
+  unsigned char entrada[81];
 
   hacia_consola();
   color(11);
@@ -920,7 +924,7 @@ error(ap)
 ** Manda una línea a la salida, hace un cambio de linea también.
 */
 emite_linea(ap)
-  char *ap;
+  unsigned char *ap;
 {
   emite_texto(ap);
   emite_nueva_linea();
@@ -930,7 +934,7 @@ emite_linea(ap)
 ** Manda un texto a la salida.
 */
 emite_texto(ap)
-  char *ap;
+  unsigned char *ap;
 {
   while (emite_car(*ap++));
 }
@@ -938,8 +942,11 @@ emite_texto(ap)
 /*
 ** Checa si encuentra un operador de expresión.
 */
-encuentra(op) char *op; {
+encuentra(op)
+  unsigned char *op;
+{
   int tam_op;
+
   espacios();
   if(tam_op = streq(linea + pos_linea, op))
     if((*(linea + pos_linea + tam_op) != '=') &&
@@ -949,7 +956,7 @@ encuentra(op) char *op; {
 }
 
 streq(cad1, cad2)
-  char cad1[], cad2[];
+  unsigned char cad1[], cad2[];
 {
   int k;
 
@@ -963,7 +970,7 @@ streq(cad1, cad2)
 }
 
 astreq(cad1, cad2, len)
-  char cad1[], cad2[];
+  unsigned char cad1[], cad2[];
   int len;
 {
   int k;
@@ -986,7 +993,7 @@ astreq(cad1, cad2, len)
 }
 
 match(lit)
-  char *lit;
+  unsigned char *lit;
 {
   int k;
 
@@ -999,7 +1006,7 @@ match(lit)
 }
 
 amatch(lit, len)
-  char *lit;
+  unsigned char *lit;
   int len;
 {
   int k;
@@ -1037,7 +1044,7 @@ espacios()
 ** Compone un entero.
 */
 lee_entero(dir)
-  char *dir;
+  unsigned char *dir;
 {
   return *dir | (*(dir+1) << 8) | (*(dir+2) << 16) | (*(dir+3) << 24);
 }
@@ -1046,7 +1053,7 @@ lee_entero(dir)
 ** Escribe un entero en una dirección.
 */
 escribe_entero(dir, dato)
-  char *dir;
+  unsigned char *dir;
   int dato;
 {
   *dir++ = dato;
@@ -1089,7 +1096,7 @@ letra(c)
 ** Prueba si el caracter dado es alfanumérico.
 */
 alfanum(c)
-  char c;
+  unsigned char c;
 {
   return ((letra(c)) || (isdigit(c)));
 }
@@ -1123,7 +1130,9 @@ isdigit(c)
 /*
 ** Checa si es un número hexadecimal.
 */
-isxdigit(c) char c; {
+isxdigit(c)
+  unsigned char c;
+{
   return (((c >= '0') && (c <= '9')) ||
           ((c >= 'A') && (c <= 'F')) ||
           ((c >= 'a') && (c <= 'f')));
@@ -1132,7 +1141,9 @@ isxdigit(c) char c; {
 /*
 ** Checa si es un espacio.
 */
-isspace(c) char c; {
+isspace(c)
+  unsigned char c;
+{
   return (c == ' ') || (c == 9);
 }
 
@@ -1140,7 +1151,7 @@ isspace(c) char c; {
 ** Conversión a máyusculas.
 */
 toupper(c)
-  char c;
+  unsigned char c;
 {
   if ((c >= 'a') && (c <= 'z'))
     c = c + ('A' - 'a');
@@ -1151,9 +1162,9 @@ toupper(c)
 ** Retorna el tamaño de una cadena.
 */
 strlen(s)
-  char *s;
+  unsigned char *s;
 {
-  char *t;
+  unsigned char *t;
 
   t = s;
   while (*s)
@@ -1165,7 +1176,7 @@ strlen(s)
 ** Copia una cadena.
 */
 strcpy(destino, origen)
-  char *destino, *origen;
+  unsigned char *destino, *origen;
 {
   while (*destino++ = *origen++);
 }
@@ -1174,7 +1185,7 @@ strcpy(destino, origen)
 ** Concatena una cadena.
 */
 strcat(destino, origen)
-  char *destino, *origen;
+  unsigned char *destino, *origen;
 {
   while (*destino) ++destino;
   strcpy(destino, origen);

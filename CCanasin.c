@@ -1,8 +1,10 @@
 /*
-** Compilador de C para transputer.
+** Compilador de C para el G10.
 ** Análisis sintáctico de alto nivel.
 **
-** (c) Copyright 1995 Oscar Toledo G.
+** por Oscar Toledo Gutiérrez.
+**
+** (c) Oscar Toledo G.1995.
 **
 ** Creación: 3 de junio de 1995.
 ** Revisión: 24 de julio de 1995. Soporte para switch, case y default.
@@ -94,8 +96,9 @@ decl_typedef(local)
   int local;
 {
   int p;
-  char nombre[TAM_NOMBRE];
-  char *chequeo;
+  unsigned char nombre[TAM_NOMBRE];
+  unsigned char *chequeo;
+
   p_tipo_1(SI);
   while (1) {
     if (fin_sentencia())
@@ -129,8 +132,8 @@ decl_typedef(local)
 decl_glb()
 {
   int p;
-  char nombre[TAM_NOMBRE];
-  char *chequeo;
+  unsigned char nombre[TAM_NOMBRE];
+  unsigned char *chequeo;
 
   p_tipo_1(SI);
   while (1) {
@@ -175,9 +178,9 @@ decl_glb()
 */
 decl_loc()
 {
-  char nombre[TAM_NOMBRE];
-  char *salva_tipo_basico, *salva_tipo_proc;
-  char *tipo_expr, *chequeo;
+  unsigned char nombre[TAM_NOMBRE];
+  unsigned char *salva_tipo_basico, *salva_tipo_proc;
+  unsigned char *tipo_expr, *chequeo;
   int pila2, p, sin_int, estaticas, nodo_expr;
   int tam_total, donde;
 
@@ -272,8 +275,8 @@ p_tipo_1(sin_int)
   int sin_int;
 {
   int salva_posicion;
-  char nombre[TAM_NOMBRE];
-  char *chequeo;
+  unsigned char nombre[TAM_NOMBRE];
+  unsigned char *chequeo;
 
   if (amatch("char", 4)) {
     tipo_basico = t_char;
@@ -361,7 +364,7 @@ p_tipo_1(sin_int)
 ** Genera un tipo procesado.
 */
 p_tipo_2(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   int p;
   int decoracion;
@@ -380,7 +383,7 @@ p_tipo_2(nombre)
 ** Copia un tipo en la siguiente posición disponible.
 */
 copia_tipo(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   int a;
   while(*tipo >= APUNTADOR) {
@@ -419,7 +422,7 @@ guarda_tipo(byte)
 ** Procesa las decoraciones de tipo.
 */
 p_tipo_3(nombre, decoracion, anidamiento)
-  char *nombre;
+  unsigned char *nombre;
   int *decoracion, anidamiento;
 {
   int p, tam;
@@ -471,13 +474,13 @@ p_tipo_3(nombre, decoracion, anidamiento)
 p_estructura(es_union)
   int es_union;
 {
-  char rotulo[TAM_NOMBRE];
-  char nombre_miembro[TAM_NOMBRE];
-  char *miembro;
-  char *estructura;
-  char *lista, *ultima_franja;
+  unsigned char rotulo[TAM_NOMBRE];
+  unsigned char nombre_miembro[TAM_NOMBRE];
+  unsigned char *miembro;
+  unsigned char *estructura;
+  unsigned char *lista, *ultima_franja;
   int posicion, tam, numero_bits;
-  char *tipo_optimo;
+  unsigned char *tipo_optimo;
 
   if(nombre_legal(rotulo)) {
     if((estructura = busca_estructura(rotulo)) != NULL) {
@@ -612,10 +615,11 @@ p_estructura(es_union)
 /*
 ** Procesa un enumerador.
 */
-p_enumerador() {
-  char rotulo[TAM_NOMBRE];
-  char nombre_miembro[TAM_NOMBRE];
-  char *enumerador;
+p_enumerador()
+{
+  unsigned char rotulo[TAM_NOMBRE];
+  unsigned char nombre_miembro[TAM_NOMBRE];
+  unsigned char *enumerador;
   int valor;
 
   if(nombre_legal(rotulo)) {
@@ -660,7 +664,7 @@ p_enumerador() {
 ** Obtiene el tamaño de un tipo.
 */
 tam_tipo(tipo)
-  char *tipo;
+  unsigned char *tipo;
 {
   int tam;
   switch(*tipo) {
@@ -719,7 +723,7 @@ subindice()
 ** a partir de la entrada.
 */
 nueva_func(n, parentesis)
-  char *n;
+  unsigned char *n;
   int parentesis;
 {
   int num_args;
@@ -825,8 +829,8 @@ nueva_func(n, parentesis)
 */
 tipos_args()
 {
-  char n[TAM_NOMBRE], *ap_arg;
-  char *nuevo_tipo;
+  unsigned char n[TAM_NOMBRE], *ap_arg;
+  unsigned char *nuevo_tipo;
   int p;
 
   while (1) {
@@ -866,7 +870,7 @@ tipos_args()
 ordena_args(cuantos)
   int cuantos;
 {
-  char *ap_arg, *tipo, *tipo_func;
+  unsigned char *ap_arg, *tipo, *tipo_func;
   int pos;
 
   args[0] = NO;
@@ -983,8 +987,8 @@ punto_y_coma()
 p_bloque()
 {
   int p, nodo_vars, c_dentro_switch;
-  char *local, *local2, *local3;
-  char *pos_tipo;
+  unsigned char *local, *local2, *local3;
+  unsigned char *pos_tipo;
 
   c_dentro_switch = dentro_switch;
   if(nivel - dentro_switch >= 1)
@@ -1270,7 +1274,7 @@ s_default()
 */
 s_goto()
 {
-  char n[TAM_NOMBRE];
+  unsigned char n[TAM_NOMBRE];
 
   if (nombre_legal(n)) {
     desp_pila(0);
@@ -1284,8 +1288,8 @@ s_goto()
 */
 p_etiqueta()
 {
-  char *c_pos_linea;
-  char n[TAM_NOMBRE];
+  unsigned char *c_pos_linea;
+  unsigned char n[TAM_NOMBRE];
   int pos_pila;
 
   espacios();
@@ -1307,9 +1311,9 @@ p_etiqueta()
 }
 
 agrega_etiqueta(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
-  char *ap;
+  unsigned char *ap;
 
   if (ap = busca_loc(nombre)) {
     if (ap[IDENT] != ETIQUETA)
@@ -1325,7 +1329,7 @@ agrega_etiqueta(nombre)
 s_return()
 {
   int origen, pila_retorno, nodo_expr;
-  char *tipo, *tipo2;
+  unsigned char *tipo, *tipo2;
 
   /* Checa si hay una expresión */
   if (fin_sentencia() == 0) {
@@ -1411,7 +1415,7 @@ nombre_ilegal()
 }
 
 redefinido(nombre)
-  char *nombre;
+  unsigned char *nombre;
 {
   error("Nombre redefinido");
   comentario();
@@ -1420,7 +1424,7 @@ redefinido(nombre)
 }
 
 pide(cadena)
-  char *cadena;
+  unsigned char *cadena;
 {
   if (match(cadena) == 0) {
     error("Falta un parentesis, llave o corchete");
